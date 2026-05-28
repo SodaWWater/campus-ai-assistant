@@ -26,7 +26,7 @@ llm:
   mode: mock
   provider: deepseek
   base-url: https://api.deepseek.com
-  api-key: ${DEEPSEEK_API_KEY:sk-4d022c3b81aa47d6b45c856db120782f}
+  api-key: ${DEEPSEEK_API_KEY:}
   model: deepseek-chat
 
 springdoc:
