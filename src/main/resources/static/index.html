@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>校园资料智能问答助手</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, "Microsoft YaHei", sans-serif;
+      background: #f6f7f9;
+      color: #222;
+    }
+    header {
+      padding: 22px 32px;
+      background: #fff;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    header h1 { margin: 0 0 6px; font-size: 24px; }
+    header p { margin: 0; color: #666; font-size: 14px; }
+    main {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 18px;
+      padding: 18px;
+      max-width: 1280px;
+      margin: 0 auto;
+    }
+    section {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 16px;
+    }
+    h2 { margin: 0 0 12px; font-size: 18px; }
+    h3 { margin: 16px 0 8px; font-size: 15px; }
+    label { display: block; margin: 10px 0 6px; font-size: 13px; color: #444; }
+    input, textarea, select {
+      width: 100%;
+      padding: 9px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+      background: #fff;
+    }
+    textarea { min-height: 92px; resize: vertical; }
+    button {
+      margin-top: 10px;
+      padding: 9px 13px;
+      border: 0;
+      border-radius: 8px;
+      background: #222;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button.secondary { background: #4b5563; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .hint { color: #777; font-size: 12px; line-height: 1.6; }
+    .chat-box {
+      min-height: 420px;
+      max-height: 560px;
+      overflow-y: auto;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .msg { margin: 10px 0; padding: 10px 12px; border-radius: 10px; line-height: 1.6; white-space: pre-wrap; }
+    .user { background: #e5e7eb; margin-left: 12%; }
+    .assistant { background: #fff; border: 1px solid #e5e7eb; margin-right: 12%; }
+    .meta { font-size: 12px; color: #777; margin-top: 6px; }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #111827;
+      color: #e5e7eb;
+      padding: 12px;
+      border-radius: 8px;
+      max-height: 260px;
+      overflow: auto;
+    }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>校园资料智能问答助手</h1>
+  <p>用于学习 RAG 流程、Prompt 构造、大模型调用和 Spring Boot 后端接口联调。</p>
+</header>
+<main>
+  <section>
+    <h2>知识库与资料</h2>
+    <label>知识库名称</label>
+    <input id="kbName" value="Java 复习资料库" />
+    <label>知识库描述</label>
+    <input id="kbDesc" value="用于 Java 基础与面试复习" />
+    <button onclick="createKb()">创建知识库</button>
+    <button class="secondary" onclick="loadKbList()">刷新列表</button>
+
+    <label>选择知识库</label>
+    <select id="kbSelect"></select>
+
+    <h3>新增文档</h3>
+    <label>标题</label>
+    <input id="docTitle" value="Java 集合基础" />
+    <label>内容</label>
+    <textarea id="docContent">ArrayList 底层基于动态数组，查询效率较高；LinkedList 底层是双向链表，适合插入和删除。HashMap 使用哈希表存储键值对，JDK 1.8 后在链表过长时会转为红黑树。</textarea>
+    <button onclick="addDocument()">录入并切分文档</button>
+    <button class="secondary" onclick="loadChunks()">查看片段</button>
+
+    <h3>学业查询</h3>
+    <div class="row">
+      <div>
+        <label>学号</label>
+        <input id="studentNo" value="20230001" />
+      </div>
+      <div>
+        <label>课程 ID</label>
+        <input id="courseId" value="1" />
+      </div>
+    </div>
+    <button onclick="queryScores()">查询成绩</button>
+    <button class="secondary" onclick="queryAverage()">查询平均分</button>
+
+    <p class="hint">先创建知识库，再录入文档，最后在右侧提问。默认 mock 模式无须真实 DeepSeek Key。</p>
+  </section>
+
+  <section>
+    <h2>问答调试</h2>
+    <div class="chat-box" id="chatBox"></div>
+    <div class="row">
+      <div>
+        <label>用户 ID</label>
+        <input id="userId" value="1" />
+      </div>
+      <div>
+        <label>问题类型提示</label>
+        <input value="资料/复习/RAG 或 成绩/分数/课程" disabled />
+      </div>
+    </div>
+    <label>输入问题</label>
+    <textarea id="question">帮我解释 Java 集合怎么复习</textarea>
+    <button onclick="ask()">发送问题</button>
+    <h3>接口返回</h3>
+    <pre id="output">等待操作...</pre>
+  </section>
+</main>
+<script>
+  const output = document.getElementById('output');
+  const chatBox = document.getElementById('chatBox');
+
+  function show(data) {
+    output.textContent = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
+  }
+
+  async function request(url, options = {}) {
+    const res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+      ...options
+    });
+    const text = await res.text();
+    try { return JSON.parse(text); } catch (e) { return text; }
+  }
+
+  function selectedKbId() {
+    const val = document.getElementById('kbSelect').value;
+    return val ? Number(val) : null;
+  }
+
+  async function createKb() {
+    const data = await request('/api/kb', {
+      method: 'POST',
+      body: JSON.stringify({ name: kbName.value, description: kbDesc.value })
+    });
+    show(data);
+    await loadKbList();
+  }
+
+  async function loadKbList() {
+    const data = await request('/api/kb/list');
+    show(data);
+    const list = data.data || [];
+    kbSelect.innerHTML = list.map(k => `<option value="${k.id}">${k.id} - ${k.name}</option>`).join('');
+  }
+
+  async function addDocument() {
+    const id = selectedKbId();
+    if (!id) return show('请先创建或选择知识库');
+    const data = await request(`/api/kb/${id}/document`, {
+      method: 'POST',
+      body: JSON.stringify({ title: docTitle.value, content: docContent.value })
+    });
+    show(data);
+  }
+
+  async function loadChunks() {
+    const id = selectedKbId();
+    if (!id) return show('请先创建或选择知识库');
+    show(await request(`/api/kb/${id}/chunks`));
+  }
+
+  function appendMessage(text, cls, meta = '') {
+    const div = document.createElement('div');
+    div.className = `msg ${cls}`;
+    div.textContent = text;
+    if (meta) {
+      const m = document.createElement('div');
+      m.className = 'meta';
+      m.textContent = meta;
+      div.appendChild(m);
+    }
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  async function ask() {
+    const body = {
+      userId: Number(userId.value || 1),
+      question: question.value,
+      knowledgeBaseId: selectedKbId()
+    };
+    appendMessage(body.question, 'user');
+    const data = await request('/api/chat/ask', { method: 'POST', body: JSON.stringify(body) });
+    show(data);
+    const answer = data.data && data.data.answer ? data.data.answer : JSON.stringify(data);
+    const meta = data.data ? `sourceType: ${data.data.sourceType || '-'} | conversationId: ${data.data.conversationId || '-'}` : '';
+    appendMessage(answer, 'assistant', meta);
+  }
+
+  async function queryScores() {
+    show(await request(`/api/academic/student/${studentNo.value}/scores`));
+  }
+
+  async function queryAverage() {
+    show(await request(`/api/academic/course/${courseId.value}/average`));
+  }
+
+  loadKbList().catch(() => show('后端未启动或数据库未连接，请先启动 Spring Boot 项目并导入 SQL。'));
+</script>
+</body>
+</html>
