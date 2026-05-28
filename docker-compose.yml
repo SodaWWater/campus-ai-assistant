@@ -1,0 +1,20 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: campus-ai-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: campus_ai
+      MYSQL_USER: campus_ai
+      MYSQL_PASSWORD: campus_ai
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./scripts/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./scripts/sample-data.sql:/docker-entrypoint-initdb.d/02-sample-data.sql:ro
+
+  redis:
+    image: redis:7
+    container_name: campus-ai-redis
+    ports:
+      - "6379:6379"
