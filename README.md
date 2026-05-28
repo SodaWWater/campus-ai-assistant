@@ -15,6 +15,7 @@
 - Lombok
 - 自定义 `LlmClient`
 - Prompt + 简化 RAG
+- 原生 HTML/CSS/JavaScript 调试页面
 
 ## 功能列表
 
@@ -28,19 +29,21 @@
 - `DeepSeekLlmClient` 预留真实调用
 - 学生课程成绩查询、课程平均分查询
 - Redis 会话上下文缓存、FAQ 缓存
+- 简单 Web 页面：创建知识库、录入资料、提问、查看接口返回
 
 ## 项目架构图
 
 ```mermaid
 flowchart TD
-    A["Controller"] --> B["Service"]
-    B --> C["Mapper"]
-    C --> D["MySQL"]
-    B --> E["Redis"]
-    B --> F["QuestionRouter"]
-    F --> G["RAG / Academic / General"]
-    G --> H["TextChunker / KeywordMatcher / PromptBuilder"]
-    G --> I["MockLlmClient / DeepSeekLlmClient"]
+    A["Web 页面 / Swagger"] --> B["Controller"]
+    B --> C["Service"]
+    C --> D["Mapper"]
+    D --> E["MySQL"]
+    C --> F["Redis"]
+    C --> G["QuestionRouter"]
+    G --> H["RAG / Academic / General"]
+    H --> I["TextChunker / KeywordMatcher / PromptBuilder"]
+    H --> J["MockLlmClient / DeepSeekLlmClient"]
 ```
 
 ## RAG 流程图
@@ -72,11 +75,16 @@ SQL 字段使用下划线，Java Entity 使用驼峰，MyBatis-Plus 开启 `map-
 ## 快速启动步骤
 
 ```powershell
-cd resume-projects/campus-ai-assistant
+cd campus-ai-assistant
 mysql -uroot -proot < scripts/init.sql
 mysql -uroot -proot < scripts/sample-data.sql
 mvn spring-boot:run
 ```
+
+启动后访问：
+
+- Web 调试页面：`http://localhost:8081/`
+- Swagger：`http://localhost:8081/swagger-ui.html`
 
 ## 本地 MySQL/Redis 启动方式
 
@@ -101,9 +109,17 @@ docker compose up -d
 
 如果使用 Docker Compose，请确认本机已安装 Docker。当前仓库不依赖 Docker 才能编译。
 
-## Swagger 地址
+## Web 页面使用顺序
 
-- `http://localhost:8081/swagger-ui/index.html`
+1. 启动 MySQL，导入 `scripts/init.sql` 和 `scripts/sample-data.sql`。
+2. 启动 Spring Boot 项目。
+3. 打开 `http://localhost:8081/`。
+4. 点击“创建知识库”。
+5. 录入一段课程资料并点击“录入并切分文档”。
+6. 在右侧输入问题，例如“帮我解释 Java 集合怎么复习”。
+7. 查看聊天区和接口返回 JSON。
+
+这个页面只用于学习和演示，避免引入 Vue/React 后分散后端学习重点。
 
 ## 接口示例
 
@@ -156,6 +172,7 @@ llm:
 - `LlmClient` 抽象如何支持 mock 和真实模型切换。
 - Redis 为什么只缓存会话上下文和高频问答，不缓存所有回答。
 - SQL 下划线和 Java 驼峰如何映射。
+- 简单 Web 页面如何帮助接口联调，但项目核心仍是后端和 RAG 流程。
 
 ## 简历写法
 
