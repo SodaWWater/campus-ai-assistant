@@ -32,10 +32,17 @@ public class ChatServiceImpl implements ChatService {
     private final PromptBuilder promptBuilder;
     private final MockLlmClient mockLlmClient;
     private final DeepSeekLlmClient deepSeekLlmClient;
+    private final SpringAiChatClientLlmClient springAiChatClientLlmClient;
     private final RedisTemplate<String, Object> redisTemplate;
 
     @Value("${llm.mode:mock}")
     private String llmMode;
+
+    @Value("${app.cache.faq-ttl-minutes:30}")
+    private long faqTtlMinutes;
+
+    @Value("${app.cache.context-ttl-hours:2}")
+    private long contextTtlHours;
 
     public ChatServiceImpl(QuestionRouter questionRouter,
                            RagService ragService,
@@ -44,6 +51,7 @@ public class ChatServiceImpl implements ChatService {
                            PromptBuilder promptBuilder,
                            MockLlmClient mockLlmClient,
                            DeepSeekLlmClient deepSeekLlmClient,
+                           SpringAiChatClientLlmClient springAiChatClientLlmClient,
                            RedisTemplate<String, Object> redisTemplate) {
         this.questionRouter = questionRouter;
         this.ragService = ragService;
@@ -52,6 +60,7 @@ public class ChatServiceImpl implements ChatService {
         this.promptBuilder = promptBuilder;
         this.mockLlmClient = mockLlmClient;
         this.deepSeekLlmClient = deepSeekLlmClient;
+        this.springAiChatClientLlmClient = springAiChatClientLlmClient;
         this.redisTemplate = redisTemplate;
     }
 
@@ -60,6 +69,7 @@ public class ChatServiceImpl implements ChatService {
         QuestionType questionType = questionRouter.route(request.getQuestion());
         List<KbDocumentChunk> matchedChunks = List.of();
         String answer;
+        String promptPreview = "";
 
         String faqKey = "chat:faq:" + Integer.toHexString(Objects.hash(request.getKnowledgeBaseId(), request.getQuestion()));
         String cachedAnswer = readStringCache(faqKey);
@@ -70,21 +80,26 @@ public class ChatServiceImpl implements ChatService {
         } else if (questionType == QuestionType.RAG) {
             matchedChunks = ragService.retrieveTopK(request.getKnowledgeBaseId(), request.getQuestion(), 3);
             String prompt = promptBuilder.buildRagPrompt(request.getQuestion(), matchedChunks);
+            promptPreview = prompt;
             answer = chooseClient().generate(prompt);
-            writeValueCache(faqKey, answer, Duration.ofMinutes(30));
+            writeValueCache(faqKey, answer, Duration.ofMinutes(faqTtlMinutes));
         } else {
             String prompt = promptBuilder.buildGeneralPrompt(request.getQuestion());
+            promptPreview = prompt;
             answer = chooseClient().generate(prompt);
         }
 
         ChatRecord record = saveChatRecord(request, questionType, matchedChunks, answer);
         appendContext(request.getUserId(), request.getQuestion(), answer);
-        return buildResponse(record, questionType, matchedChunks, answer);
+        return buildResponse(record, questionType, matchedChunks, answer, promptPreview);
     }
 
     private com.liminghan.campusai.service.LlmClient chooseClient() {
         if ("real".equalsIgnoreCase(llmMode)) {
             return deepSeekLlmClient;
+        }
+        if ("spring-ai".equalsIgnoreCase(llmMode)) {
+            return springAiChatClientLlmClient;
         }
         return mockLlmClient;
     }
@@ -104,11 +119,12 @@ public class ChatServiceImpl implements ChatService {
         return record;
     }
 
-    private ChatResponseVO buildResponse(ChatRecord record, QuestionType questionType, List<KbDocumentChunk> chunks, String answer) {
+    private ChatResponseVO buildResponse(ChatRecord record, QuestionType questionType, List<KbDocumentChunk> chunks, String answer, String promptPreview) {
         ChatResponseVO response = new ChatResponseVO();
         response.setAnswer(answer);
         response.setSourceType(questionType.name());
         response.setConversationId(record.getId());
+        response.setPromptPreview(promptPreview);
         response.setMatchedChunks(chunks.stream().map(this::toMatchedChunkVO).toList());
         return response;
     }
@@ -143,7 +159,7 @@ public class ChatServiceImpl implements ChatService {
             String key = "chat:context:" + userId;
             redisTemplate.opsForList().rightPush(key, "Q: " + question + "\nA: " + answer);
             redisTemplate.opsForList().trim(key, -5, -1);
-            redisTemplate.expire(key, Duration.ofHours(2));
+            redisTemplate.expire(key, Duration.ofHours(contextTtlHours));
         } catch (Exception ignored) {
             // Redis context cache must not break the core chat flow.
         }

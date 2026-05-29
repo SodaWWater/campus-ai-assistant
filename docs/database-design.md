@@ -1,21 +1,20 @@
 # 数据库设计
 
-数据库名：`campus_ai`
+数据库：`campus_ai`。SQL 字段使用下划线，Java Entity 使用驼峰，MyBatis-Plus 开启 `map-underscore-to-camel-case`。
 
-字段命名约定：
+| 表名 | 说明 | 主要字段 |
+| --- | --- | --- |
+| `kb_knowledge_base` | 知识库 | `id`, `name`, `description`, `created_at`, `updated_at` |
+| `kb_document` | 文档 | `id`, `knowledge_base_id`, `title`, `content`, `created_at`, `updated_at` |
+| `kb_document_chunk` | 文档片段 | `id`, `document_id`, `knowledge_base_id`, `chunk_index`, `content`, `keywords`, `created_at` |
+| `chat_record` | 聊天记录 | `id`, `user_id`, `question`, `answer`, `source_type`, `matched_chunk_ids`, `created_at` |
+| `student` | 学生 | `id`, `student_no`, `name`, `major`, `grade` |
+| `course` | 课程 | `id`, `course_code`, `course_name`, `credit` |
+| `score` | 成绩 | `id`, `student_id`, `course_id`, `score`, `semester` |
 
-- SQL 字段使用下划线命名。
-- Java 实体字段使用驼峰命名。
-- MyBatis-Plus 使用 `map-underscore-to-camel-case: true` 映射。
+初始化脚本：
 
-## 表结构
+- `scripts/init.sql`
+- `scripts/sample-data.sql`
 
-- `kb_knowledge_base`：知识库
-- `kb_document`：知识库文档
-- `kb_document_chunk`：文档切分片段
-- `chat_record`：问答记录
-- `student`：学生
-- `course`：课程
-- `score`：成绩
-
-完整建表语句见 `scripts/init.sql`，演示数据见 `scripts/sample-data.sql`。
+文档切分消息使用 RabbitMQ，不新增业务表；切分结果仍写入 `kb_document_chunk`。

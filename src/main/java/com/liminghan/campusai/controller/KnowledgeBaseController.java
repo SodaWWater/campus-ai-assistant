@@ -62,6 +62,14 @@ public class KnowledgeBaseController {
         return Result.success(Map.of("documentId", documentId));
     }
 
+    @Operation(summary = "Upload document and process chunks asynchronously")
+    @PostMapping("/{knowledgeBaseId}/document/upload")
+    public Result<Map<String, Object>> uploadDocument(@PathVariable Long knowledgeBaseId,
+                                                      @Valid @RequestBody DocumentCreateRequest request) {
+        Long documentId = knowledgeBaseService.uploadDocumentAsync(knowledgeBaseId, request);
+        return Result.success(Map.of("documentId", documentId, "status", "PROCESSING"));
+    }
+
     @Operation(summary = "List chunks in knowledge base")
     @GetMapping("/{knowledgeBaseId}/chunks")
     public Result<List<KbDocumentChunk>> listChunks(@PathVariable Long knowledgeBaseId) {

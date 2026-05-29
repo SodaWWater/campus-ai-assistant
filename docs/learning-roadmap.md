@@ -1,29 +1,19 @@
 # 学习路线
 
-## 第 1 步：跑通项目
+1. 看 `docs/api.md`，用 Swagger 或 curl 跑通健康检查、知识库、文档、问答、成绩查询。
+2. 看 `scripts/init.sql` 和 Entity，理解表结构和字段映射。
+3. 看 `KnowledgeBaseServiceImpl`，理解文档保存、切分、RabbitMQ 异步入口。
+4. 看 `RagServiceImpl`、`KeywordMatcher`、`PromptBuilder`，理解 RAG 最小闭环。
+5. 看 `ChatServiceImpl`，画出路由、检索、Prompt、LLM、保存聊天记录、Redis 缓存的顺序。
+6. 切换 `llm.mode=mock`、`real`、`spring-ai`，理解三种调用方式差异。
+7. 启动 `frontend`，通过页面演示知识库和问答流程。
 
-导入 `scripts/init.sql` 和 `scripts/sample-data.sql`，启动项目，访问 `GET /api/health`。
+## 7 天计划
 
-## 第 2 步：看知识库接口
-
-阅读 `KnowledgeBaseController` 和 `KnowledgeBaseServiceImpl`，理解知识库、文档、chunk 的写入流程。
-
-## 第 3 步：看 RAG 工具类
-
-阅读 `TextChunker`、`KeywordMatcher`、`PromptBuilder`，理解文档切分、检索和 Prompt 构造。
-
-## 第 4 步：看聊天主流程
-
-阅读 `ChatServiceImpl`，理解 QuestionRouter、RAG、普通聊天、聊天记录和 Redis 缓存。
-
-## 第 5 步：看学业查询
-
-阅读 `AcademicController` 和 `AcademicServiceImpl`，理解学生、课程、成绩表如何查询。
-
-## 第 6 步：背面试题
-
-按 `docs/interview-qa.md` 的 25 个问题准备，每个问题都要能指出代码位置。
-
-## 第 7 步：整理简历话术
-
-参考 `docs/resume-description.md`，只写当前真实实现，不写未实现功能。
+- Day 1：跑通后端、导入 SQL。
+- Day 2：理解知识库和文档切分。
+- Day 3：理解 RAG 检索与 Prompt。
+- Day 4：理解 LLM 客户端抽象和 Spring AI ChatClient。
+- Day 5：理解 Redis 缓存和降级。
+- Day 6：理解 RabbitMQ 异步切分。
+- Day 7：用自己的话复述项目，并准备接口演示。

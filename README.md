@@ -1,183 +1,118 @@
-# 校园资料智能问答与学业助手系统
+# campus-ai-assistant
 
-## 项目简介
-
-`campus-ai-assistant` 是一个面向 AI 应用开发实习、智能体开发实习和 Java 后端实习的个人学习、复现与二次开发项目。项目实现了知识库创建、文档录入、文本切分、关键词 TopK 检索、Prompt 构建、Mock/DeepSeek LLM 调用、聊天记录保存和学业成绩查询。
+校园资料智能问答与学业助手系统是一个个人学习、复现与二次开发项目，用 Spring Boot 实现知识库录入、文本切分、关键词 TopK 检索、Prompt 拼接、Mock/DeepSeek/Spring AI ChatClient 可替换调用、聊天记录保存、学业成绩查询，并补充 Vue 3 前端演示。
 
 ## 技术栈
 
-- Java 21
-- Spring Boot 3.x
-- MyBatis-Plus
-- MySQL 8
-- Redis
-- springdoc-openapi
-- Lombok
-- 自定义 `LlmClient`
-- Prompt + 简化 RAG
-- 原生 HTML/CSS/JavaScript 调试页面
+- 后端：Java 21、Spring Boot 3、MyBatis-Plus、Spring Web、Validation、SpringDoc OpenAPI
+- AI：`LlmClient` 抽象、`MockLlmClient`、`DeepSeekLlmClient`、`SpringAiChatClientLlmClient`
+- 数据：MySQL、Redis
+- 消息队列：RabbitMQ，用于文档异步切分示例
+- 前端：Vue 3、Vite、Element Plus、Axios
 
 ## 功能列表
 
 - 知识库创建、列表、详情、删除
-- 文档录入、文本切分、chunk 查询、文档删除
-- `QuestionRouter` 问题路由：RAG、学业查询、普通问答
-- `TextChunker` 文本切分
-- `KeywordMatcher` 关键词 TopK 检索
-- `PromptBuilder` 构建结构化 Prompt
-- `MockLlmClient` 默认模拟回答
-- `DeepSeekLlmClient` 预留真实调用
+- 文档录入、同步切分、RabbitMQ 异步切分
+- chunk 查询、关键词 TopK 检索
+- `QuestionRouter` 区分 RAG、学业查询、通用问题
+- `PromptBuilder` 构造 RAG Prompt 和通用 Prompt
+- `/api/chat/ask` 返回答案、命中片段和 promptPreview
+- Redis 缓存知识库列表、高频问答、会话上下文
 - 学生课程成绩查询、课程平均分查询
-- Redis 会话上下文缓存、FAQ 缓存
-- 简单 Web 页面：创建知识库、录入资料、提问、查看接口返回
 
-## 项目架构图
+## 架构图
 
 ```mermaid
-flowchart TD
-    A["Web 页面 / Swagger"] --> B["Controller"]
-    B --> C["Service"]
-    C --> D["Mapper"]
-    D --> E["MySQL"]
-    C --> F["Redis"]
-    C --> G["QuestionRouter"]
-    G --> H["RAG / Academic / General"]
-    H --> I["TextChunker / KeywordMatcher / PromptBuilder"]
-    H --> J["MockLlmClient / DeepSeekLlmClient"]
+flowchart LR
+  Vue["Vue 3 前端"] --> API["Spring Boot Controller"]
+  API --> Service["Service 层"]
+  Service --> MP["MyBatis-Plus Mapper"]
+  MP --> MySQL[(MySQL)]
+  Service --> Redis[(Redis)]
+  Service --> MQ["RabbitMQ 文档切分队列"]
+  MQ --> Consumer["DocumentProcessConsumer"]
+  Service --> LLM["LlmClient: Mock / DeepSeek / Spring AI"]
 ```
 
 ## RAG 流程图
 
 ```mermaid
-flowchart LR
-    A["新增文档"] --> B["TextChunker 切分"]
-    B --> C["保存 kb_document_chunk"]
-    D["用户提问"] --> E["QuestionRouter"]
-    E --> F["KeywordMatcher TopK"]
-    F --> G["PromptBuilder"]
-    G --> H["LlmClient"]
-    H --> I["保存 chat_record"]
-    I --> J["返回 answer 和 matchedChunks"]
+flowchart TD
+  A["用户提问"] --> B["QuestionRouter 判断类型"]
+  B -->|RAG| C["RagService 检索 TopK chunks"]
+  C --> D["PromptBuilder 拼接问题和片段"]
+  D --> E["LlmClient 生成回答"]
+  E --> F["保存 chat_record"]
+  F --> G["写入 Redis 会话上下文和 FAQ 缓存"]
 ```
 
-## 数据库表说明
+## 数据库表
 
 - `kb_knowledge_base`：知识库
-- `kb_document`：文档原文
-- `kb_document_chunk`：文档片段
-- `chat_record`：问答记录
+- `kb_document`：文档
+- `kb_document_chunk`：文档切分片段
+- `chat_record`：聊天记录
 - `student`：学生
 - `course`：课程
 - `score`：成绩
 
-SQL 字段使用下划线，Java Entity 使用驼峰，MyBatis-Plus 开启 `map-underscore-to-camel-case`。
+SQL 字段使用下划线，Java Entity 使用驼峰命名，MyBatis-Plus 开启 `map-underscore-to-camel-case`。
 
-## 快速启动步骤
-
-```powershell
-cd campus-ai-assistant
-mysql -uroot -proot < scripts/init.sql
-mysql -uroot -proot < scripts/sample-data.sql
-mvn spring-boot:run
-```
-
-启动后访问：
-
-- Web 调试页面：`http://localhost:8081/`
-- Swagger：`http://localhost:8081/swagger-ui.html`
-
-## 本地 MySQL/Redis 启动方式
-
-MySQL 默认配置：
-
-- URL：`jdbc:mysql://localhost:3306/campus_ai`
-- 用户名：`root`
-- 密码：`root`
-
-Redis 默认配置：
-
-- host：`localhost`
-- port：`6379`
-
-Redis 不可用时，聊天主流程仍可执行，但会跳过会话上下文和 FAQ 缓存。
-
-## Docker Compose 可选启动方式
+## 快速启动
 
 ```powershell
 docker compose up -d
+mvn spring-boot:run
 ```
 
-如果使用 Docker Compose，请确认本机已安装 Docker。当前仓库不依赖 Docker 才能编译。
+前端：
 
-## Web 页面使用顺序
+```powershell
+cd frontend
+npm install
+npm run dev
+```
 
-1. 启动 MySQL，导入 `scripts/init.sql` 和 `scripts/sample-data.sql`。
-2. 启动 Spring Boot 项目。
-3. 打开 `http://localhost:8081/`。
-4. 点击“创建知识库”。
-5. 录入一段课程资料并点击“录入并切分文档”。
-6. 在右侧输入问题，例如“帮我解释 Java 集合怎么复习”。
-7. 查看聊天区和接口返回 JSON。
+地址：
 
-这个页面只用于学习和演示，避免引入 Vue/React 后分散后端学习重点。
+- 后端：http://localhost:8081
+- 前端：http://localhost:5173
+- Swagger：http://localhost:8081/swagger-ui.html
+- RabbitMQ 管理台：http://localhost:15672，账号密码 `guest/guest`
+
+## 本地 MySQL / Redis / RabbitMQ
+
+`docker-compose.yml` 提供 MySQL、Redis、RabbitMQ。也可以本机自行启动后通过环境变量覆盖：
+
+```powershell
+$env:MYSQL_URL="jdbc:mysql://localhost:3306/campus_ai?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true"
+$env:REDIS_HOST="localhost"
+$env:RABBITMQ_HOST="localhost"
+```
+
+## mock / real / spring-ai 模式
+
+默认 `llm.mode=mock`，没有 DeepSeek Key 也能启动和演示。`llm.mode=real` 使用 `DeepSeekLlmClient`，缺少 `DEEPSEEK_API_KEY` 时只在调用真实模型时报明确错误。`llm.mode=spring-ai` 使用 `SpringAiChatClientLlmClient`，配置复用 `spring.ai.openai.*`。
 
 ## 接口示例
 
-创建知识库：
-
-```json
-{
-  "name": "Java 复习资料库",
-  "description": "Java 基础知识资料"
-}
+```powershell
+curl http://localhost:8081/api/health
+curl -X POST http://localhost:8081/api/kb -H "Content-Type: application/json" -d "{\"name\":\"Java复习\",\"description\":\"面试资料\"}"
+curl -X POST http://localhost:8081/api/chat/ask -H "Content-Type: application/json" -d "{\"userId\":1,\"knowledgeBaseId\":1,\"question\":\"Java 集合怎么复习\"}"
 ```
 
-新增文档：
-
-```json
-{
-  "title": "Java 集合基础",
-  "content": "ArrayList 底层基于动态数组，HashMap 使用哈希表保存键值对..."
-}
-```
-
-AI 提问：
-
-```json
-{
-  "userId": 1,
-  "question": "帮我解释 Java 集合怎么复习",
-  "knowledgeBaseId": 1
-}
-```
-
-## mock 模式和 real 模式
-
-默认配置为 mock：
-
-```yaml
-llm:
-  mode: mock
-  api-key: ${DEEPSEEK_API_KEY:}
-```
-
-- `mock`：走 `MockLlmClient`，无 API Key 也能运行。
-- `real`：走 `DeepSeekLlmClient`，调用时需要 `DEEPSEEK_API_KEY`。
-- real 模式缺少 API Key 时，项目启动不报错，只在调用模型时返回明确错误。
+完整接口见 `docs/api.md`。
 
 ## 面试讲解重点
 
-- 为什么先做关键词检索版 RAG，而不是上向量数据库。
-- 为什么成绩查询要查 MySQL，而不是交给模型编造。
-- `LlmClient` 抽象如何支持 mock 和真实模型切换。
-- Redis 为什么只缓存会话上下文和高频问答，不缓存所有回答。
-- SQL 下划线和 Java 驼峰如何映射。
-- 简单 Web 页面如何帮助接口联调，但项目核心仍是后端和 RAG 流程。
+重点讲清楚文本如何切分、如何做关键词检索、Prompt 怎么拼、LLM 客户端如何替换、Redis 缓存失败为什么不影响主链路、RabbitMQ 在文档切分中如何做异步化。
 
 ## 简历写法
 
-建议写成“基于 Spring Boot 的校园资料智能问答项目”，强调接口开发、数据库设计、简化 RAG、Prompt 构造、大模型 API 接入和 Redis 缓存。不要写复杂 Agent、向量数据库或生产级知识库系统。
+建议写成“个人学习、复现与二次开发项目”，强调 Spring Boot、MyBatis-Plus、MySQL、Redis、RabbitMQ、RAG、Prompt、大模型 API，不写高并发、分布式、微服务。
 
 ## 参考项目与致谢
 
-参考 [kszapsza/spring-ai-rag](https://github.com/kszapsza/spring-ai-rag) 的 Spring Boot、RAG 和大模型应用组织思路。本项目为个人学习、复现与二次开发项目，不将参考项目表述为完全原创。
+参考了常见知识库问答、校园助手和 Spring Boot 后端项目的公开学习思路，并结合实习简历场景做了二次开发。

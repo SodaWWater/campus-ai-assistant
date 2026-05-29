@@ -20,6 +20,10 @@ public interface KnowledgeBaseService extends IService<KnowledgeBase> {
 
     Long addDocument(Long knowledgeBaseId, DocumentCreateRequest request);
 
+    Long uploadDocumentAsync(Long knowledgeBaseId, DocumentCreateRequest request);
+
+    void processDocumentChunks(Long documentId);
+
     List<KbDocumentChunk> listChunks(Long knowledgeBaseId);
 
     void deleteDocument(Long documentId);

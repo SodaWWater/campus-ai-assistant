@@ -13,5 +13,7 @@ public class ChatResponseVO {
 
     private Long conversationId;
 
+    private String promptPreview;
+
     private List<MatchedChunkVO> matchedChunks;
 }
