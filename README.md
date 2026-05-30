@@ -21,7 +21,7 @@
 - **答案溯源**：返回引用来源（文档标题、片段序号、匹配得分），答案可核查
 - **对话记忆**：Redis 热存储 + MySQL 持久化双写，24 小时 TTL，自动回退查询
 - **学业查询**：JWT 自动识别学生身份，展示成绩明细、平均分、总学分
-- **异步处理**：RabbitMQ 异步文档切分，状态流转 PROCESSING → DONE / FAILED
+- **异步处理**：RabbitMQ 纯异步文档切分 + 死信队列（DLQ）+ 指数退避重试（3 次），前端轮询处理进度
 - **多角色鉴权**：Spring Security 6 + JWT + BCrypt，角色级路由守卫
 - **管理员全量 CRUD**：用户创建/编辑/删除/启停，支持学生表同步
 
@@ -31,7 +31,7 @@
 - **AI**：LlmClient 抽象 → MockLlmClient / DeepSeekLlmClient / SpringAiChatClientLlmClient
 - **ORM**：MyBatis-Plus 3.5.9
 - **数据**：MySQL 8.0、Redis 7（对话上下文缓存、FAQ 缓存）
-- **消息队列**：RabbitMQ 3（文档异步切分，Jackson JSON 序列化）
+- **消息队列**：RabbitMQ 3（纯异步文档切分 + 死信队列 + RetryInterceptor 重试，Jackson JSON 序列化）
 - **文档解析**：PDFBox 3.0.3（PDF）、Apache POI 5.3.0（Word/docx）
 - **前端**：Vue 3、Vue Router（Hash 路由 + 懒加载）、Element Plus、Vite、Axios
 - **API 文档**：SpringDoc OpenAPI 2.6
@@ -52,7 +52,7 @@ flowchart LR
   Service --> MP["MyBatis-Plus Mapper"]
   MP --> MySQL[(MySQL 8.0)]
   Service --> Redis[(Redis 7\n对话上下文 / FAQ 缓存)]
-  Service --> MQ["RabbitMQ 3\n文档异步切分"]
+  Service --> MQ["RabbitMQ 3\n异步切分 + 死信队列 + 重试"]
   MQ --> Consumer["DocumentProcessConsumer\nTextChunker + KeywordMatcher"]
   Service --> LLM["LlmClient\nMock / DeepSeek / Spring AI"]
 ```
@@ -151,7 +151,7 @@ curl -X POST http://localhost:8081/api/admin/users \
 ## 面试重点
 
 1. **为什么多角色？** 学生消费知识，教师维护资料，管理员关注系统状态。真实校园产品需要不同的功能边界和权限隔离。
-2. **为什么用 RabbitMQ？** 上传不阻塞用户，异步切分并展示状态流转（PROCESSING → DONE / FAILED），Jackson JSON 序列化避免反序列化安全问题。
+2. **为什么用 RabbitMQ？** 上传接口投递消息后立即返回，Consumer 异步切分。配置 RetryInterceptor（3 次指数退避）+ 死信队列（DLQ），重试耗尽后自动标记 FAILED。Jackson JSON 序列化避免反序列化安全问题。
 3. **为什么做对话记忆？** 多轮对话需要上下文连续性。Redis List 存储最近 10 轮（20 条），24h TTL 热数据，降级到 MySQL 持久化。主流企业方案：Redis 热缓存 + DB 持久化双写。
 4. **RAG 为什么作为参考而非权威？** 关键词匹配可能遗漏，LLM 综合能力更强。检索结果作为参考资料注入 Prompt，LLM 可结合自身知识补充回答，避免"生硬拼接"。
 5. **为什么返回引用来源？** 知识库问答需要可核查依据，答案溯源提升可信度，面试可展示 RAG 可解释性闭环。

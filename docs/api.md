@@ -247,7 +247,7 @@
 - 表单字段：`file`
 - 支持格式：`.txt` `.md` `.pdf` `.docx` `.doc`
 
-上传后自动提取文本（PDFBox 处理 PDF，POI 处理 Word），保存文档元信息，立即同步切分并投递 RabbitMQ 异步处理。
+上传后自动提取文本（PDFBox 处理 PDF，POI 处理 Word），保存文档元信息（PROCESSING），投递 RabbitMQ 后接口立即返回。Consumer 异步切分，失败时 RetryInterceptor 指数退避重试 3 次，耗尽后路由至死信队列（DLQ）标记 FAILED。前端轮询展示处理进度。
 
 返回：
 
@@ -280,7 +280,7 @@
 - `POST /api/document/{documentId}/reprocess`
 - 角色：TEACHER / ADMIN
 
-将文档重置为 PROCESSING 并重新投递到 RabbitMQ。适用于处理失败的文档。
+将文档重置为 PROCESSING 并重新投递 RabbitMQ 异步处理。MQ 不可用时降级为同步处理。适用于处理失败的文档。
 
 ### 删除文档
 

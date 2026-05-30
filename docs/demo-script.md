@@ -30,17 +30,17 @@
 
 - 选择一个 `.pdf` 或 `.docx` 文件上传（建议提前准备一份 Java 知识文档）
 - 文件类型支持：TXT、Markdown、PDF、Word（docx/doc）
-- 上传后列表中出现一条记录，状态为 `PROCESSING`
+- 上传后列表中出现一条记录，状态为 `PROCESSING`，页面自动每 3 秒轮询刷新
 
-> 讲解：**"系统使用 PDFBox 提取 PDF 文本、POI 提取 Word 文本。上传后保存文档元信息（文件名、类型、大小），立即异步投递到 RabbitMQ 进行切分。"**
+> 讲解：**"系统使用 PDFBox 提取 PDF 文本、POI 提取 Word 文本。上传后仅保存文档元信息并投递 RabbitMQ，接口立即返回。Consumer 异步切分，前端轮询展示处理进度。"**
 
 ### 1.4 查看处理结果
-> 刷新页面
+> 等待片刻，状态自动更新
 
 - 状态变为 `DONE`，显示 chunk 数量和 `processedAt` 时间
 - 点击「查看片段」，弹出片段列表（chunkIndex、content 前 200 字、提取关键词）
 
-> 讲解：**"文档被 TextChunker 按约 400 字切分，每个片段通过 KeywordMatcher 提取关键词。状态流转 PROCESSING → DONE/FAILED，失败文档会记录 errorMessage 并可重新解析。"**
+> 讲解：**"Consumer 收到消息后执行 TextChunker（400 字滑动窗口）和 KeywordMatcher 关键词提取。如果处理失败，RetryInterceptor 会指数退避重试 3 次（1s→2s→4s），耗尽后路由到死信队列（DLQ）标记 FAILED。"**
 
 ### 1.5 继续上传（可选）
 - 再上传一份 .txt 或 .md 文件，演示批量资料管理
@@ -180,7 +180,7 @@
 | 面试官可能的问题 | 推荐回答要点 |
 |-----------------|-------------|
 | 为什么做多角色？ | 真实校园产品中，学生消费知识、教师维护资料、管理员关注系统状态，三者的需求边界和权限隔离完全不同。 |
-| 文档处理为什么用 RabbitMQ？ | 上传接口不应长时间阻塞，异步切分后通过状态展示（PROCESSING→DONE/FAILED）让用户感知进度。使用 Jackson JSON 序列化避免 Spring AMQP 默认反序列化的安全问题。 |
+| 文档处理为什么用 RabbitMQ？ | 上传接口投递消息后立即返回，Consumer 异步切分。配置 RetryInterceptor 指数退避重试 3 次，耗尽后 RepublishMessageRecoverer 路由至死信队列（DLQ）标记 FAILED。Jackson JSON 序列化避免反序列化安全问题。 |
 | 为什么没上向量数据库？ | 演示阶段用关键词 TopK 保证可运行和可解释（得分机制透明），RagService 已预留检索层抽象，后续可替换为向量检索。 |
 | 对话记忆怎么实现的？ | Redis List 存储最近 10 轮 Q&A 对（24h TTL），每次提问注入 Prompt；同时 MySQL 持久化，Redis 不可用时自动回退查询。业界主流方案：热缓存 + 持久化双写。 |
 | RAG 如何工作的？ | 关键词匹配检索 TopK 片段 → 获取文档标题 → 构造 Prompt（角色+历史+参考资料+问题） → 始终调用 LLM → 返回回答 + 引用来源。检索结果为参考资料而非唯一权威，LLM 可结合自身知识补充。 |
