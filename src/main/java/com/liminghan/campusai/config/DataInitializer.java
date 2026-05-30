@@ -36,8 +36,10 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        migrateSchema();
+        // 先初始化账号（确保 ensureStudentUserLink 能查到用户）
         initDemoAccounts();
+        // 再迁移表结构并关联学生
+        migrateSchema();
     }
 
     private void migrateSchema() {
