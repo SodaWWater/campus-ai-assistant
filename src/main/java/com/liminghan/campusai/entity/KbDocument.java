@@ -20,6 +20,22 @@ public class KbDocument {
 
     private String content;
 
+    private String fileName;
+
+    private String fileType;
+
+    private Long fileSize;
+
+    private String status;
+
+    private String errorMessage;
+
+    private Integer chunkCount;
+
+    private Long uploadedBy;
+
+    private LocalDateTime processedAt;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

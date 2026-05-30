@@ -1,11 +1,10 @@
 package com.liminghan.campusai.util;
 
 import com.liminghan.campusai.entity.KbDocumentChunk;
+import com.liminghan.campusai.vo.MatchedChunkVO;
 import org.springframework.stereotype.Component;
 
-import java.util.Comparator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Component
@@ -19,19 +18,39 @@ public class KeywordMatcher {
                 .toList();
     }
 
+    public List<MatchedChunkVO> topKWithScore(String question, List<KbDocumentChunk> chunks, int topK,
+                                               Map<Long, String> titleMap) {
+        Set<String> questionTokens = tokenize(question);
+        return chunks.stream()
+                .map(chunk -> {
+                    int s = score(questionTokens, chunk.getContent());
+                    MatchedChunkVO vo = new MatchedChunkVO();
+                    vo.setId(chunk.getId());
+                    vo.setChunkIndex(chunk.getChunkIndex());
+                    vo.setContent(chunk.getContent());
+                    vo.setDocumentTitle(titleMap.getOrDefault(chunk.getDocumentId(), "未知文档"));
+                    vo.setScore(s);
+                    return vo;
+                })
+                .sorted(Comparator.comparingInt(MatchedChunkVO::getScore).reversed())
+                .limit(topK)
+                .filter(vo -> vo.getScore() > 0)
+                .toList();
+    }
+
     public String extractKeywords(String text) {
         return String.join(",", tokenize(text));
     }
 
-    private int score(Set<String> questionTokens, String content) {
+    public int score(Set<String> questionTokens, String content) {
         Set<String> contentTokens = tokenize(content);
-        int score = 0;
+        int s = 0;
         for (String token : questionTokens) {
             if (contentTokens.contains(token)) {
-                score++;
+                s++;
             }
         }
-        return score;
+        return s;
     }
 
     private Set<String> tokenize(String text) {

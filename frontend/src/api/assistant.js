@@ -12,6 +12,10 @@ export function listKnowledgeBases() {
   return http.get('/kb/list')
 }
 
+export function getKnowledgeBases() {
+  return http.get('/kb')
+}
+
 export function getKnowledgeBase(id) {
   return http.get(`/kb/${id}`)
 }

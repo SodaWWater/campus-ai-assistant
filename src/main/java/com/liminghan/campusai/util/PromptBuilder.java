@@ -9,29 +9,57 @@ import java.util.stream.Collectors;
 @Component
 public class PromptBuilder {
 
+    /**
+     * 构建 RAG 辅助的对话 Prompt。
+     * RAG 资料作为「参考资料」注入，但 LLM 可以结合自身知识回答，
+     * 当资料与问题无关时 LLM 应自行判断并给出合理回答。
+     */
+    public String buildRagPrompt(String question, List<KbDocumentChunk> chunks, String conversationHistory) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是校园知识库智能助手，帮助学生解答课程相关问题。\n");
+        sb.append("回答原则：\n");
+        sb.append("1. 优先参考提供的课程资料，在回答中引用资料内容\n");
+        sb.append("2. 如果资料与问题无关或资料不足，可以使用你自己的知识补充回答\n");
+        sb.append("3. 回答要准确、简洁、适合学生理解\n\n");
+
+        if (conversationHistory != null && !conversationHistory.isBlank()) {
+            sb.append("【历史对话】\n");
+            sb.append(conversationHistory).append("\n\n");
+        }
+
+        if (chunks != null && !chunks.isEmpty()) {
+            sb.append("【参考资料（来自课程知识库）】\n");
+            for (KbDocumentChunk chunk : chunks) {
+                sb.append("--- 资料片段 ").append(chunk.getChunkIndex()).append(" ---\n");
+                sb.append(chunk.getContent()).append("\n");
+            }
+            sb.append("\n");
+        }
+
+        sb.append("【用户问题】\n");
+        sb.append(question);
+        return sb.toString();
+    }
+
     public String buildRagPrompt(String question, List<KbDocumentChunk> chunks) {
-        String context = chunks.stream()
-                .map(chunk -> "片段 " + chunk.getChunkIndex() + ": " + chunk.getContent())
-                .collect(Collectors.joining("\n"));
-        return """
-                你是校园资料智能问答助手。
-                请只基于给定资料回答，不要编造。
-                如果资料不足，请回答“当前知识库未找到相关内容”。
+        return buildRagPrompt(question, chunks, null);
+    }
 
-                【资料片段】
-                %s
+    public String buildGeneralPrompt(String question, String conversationHistory) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("你是校园学习助手，帮助学生解答学习相关问题。\n");
+        sb.append("请用简洁、可靠、适合本科生理解的方式回答。\n\n");
 
-                【用户问题】
-                %s
-                """.formatted(context, question);
+        if (conversationHistory != null && !conversationHistory.isBlank()) {
+            sb.append("【历史对话】\n");
+            sb.append(conversationHistory).append("\n\n");
+        }
+
+        sb.append("用户问题：").append(question);
+        return sb.toString();
     }
 
     public String buildGeneralPrompt(String question) {
-        return """
-                你是一个面向大学生的学习助手。
-                请用简洁、可靠、适合本科生理解的方式回答。
-
-                用户问题：%s
-                """.formatted(question);
+        return buildGeneralPrompt(question, null);
     }
 }

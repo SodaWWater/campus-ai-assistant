@@ -16,6 +16,12 @@ public class ChatRecord {
 
     private Long userId;
 
+    private String username;
+
+    private Long conversationId;
+
+    private Long knowledgeBaseId;
+
     private String question;
 
     private String answer;
@@ -23,6 +29,14 @@ public class ChatRecord {
     private String sourceType;
 
     private String matchedChunkIds;
+
+    private String promptPreview;
+
+    private String llmMode;
+
+    private Long retrievalTimeMs;
+
+    private Long generationTimeMs;
 
     private LocalDateTime createdAt;
 }

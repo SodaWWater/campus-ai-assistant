@@ -10,4 +10,6 @@ public class KnowledgeBaseCreateRequest {
     private String name;
 
     private String description;
+
+    private String visibility = "PUBLIC";
 }

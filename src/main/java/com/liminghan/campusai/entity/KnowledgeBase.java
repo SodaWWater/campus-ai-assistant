@@ -18,6 +18,16 @@ public class KnowledgeBase {
 
     private String description;
 
+    private Long ownerId;
+
+    private String ownerName;
+
+    private String visibility;
+
+    private Integer documentCount;
+
+    private Integer chunkCount;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

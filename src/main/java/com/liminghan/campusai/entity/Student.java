@@ -19,4 +19,6 @@ public class Student {
     private String major;
 
     private String grade;
+
+    private Long userId;
 }
