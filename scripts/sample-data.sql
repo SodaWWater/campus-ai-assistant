@@ -15,7 +15,7 @@ ON DUPLICATE KEY UPDATE password = VALUES(password), nickname = VALUES(nickname)
 -- ============================================================
 INSERT INTO kb_knowledge_base (id, name, description, owner_id, owner_name, visibility, document_count, chunk_count, created_at, updated_at)
 VALUES (1, 'Java 复习资料库', '用于演示 RAG 问答的 Java 基础资料', 2, '张老师', 'PUBLIC', 1, 1, NOW(), NOW())
-ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), owner_id = VALUES(owner_id), owner_name = VALUES(owner_name), updated_at = NOW();
+ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), owner_id = VALUES(owner_id), owner_name = VALUES(owner_name), document_count = VALUES(document_count), chunk_count = VALUES(chunk_count), updated_at = NOW();
 
 INSERT INTO kb_document (id, knowledge_base_id, title, content, file_name, file_type, file_size, status, error_message, chunk_count, uploaded_by, processed_at, created_at, updated_at)
 VALUES (
@@ -34,7 +34,7 @@ VALUES (
     NOW(),
     NOW()
 )
-ON DUPLICATE KEY UPDATE title = VALUES(title), content = VALUES(content), file_name = VALUES(file_name), status = VALUES(status), updated_at = NOW();
+ON DUPLICATE KEY UPDATE title = VALUES(title), content = VALUES(content), file_name = VALUES(file_name), file_type = VALUES(file_type), status = VALUES(status), chunk_count = VALUES(chunk_count), uploaded_by = VALUES(uploaded_by), updated_at = NOW();
 
 INSERT INTO kb_document_chunk (id, document_id, knowledge_base_id, chunk_index, content, keywords, created_at)
 VALUES (
@@ -49,13 +49,39 @@ VALUES (
 ON DUPLICATE KEY UPDATE content = VALUES(content), keywords = VALUES(keywords);
 
 -- ============================================================
--- 学业数据（保持不变）
+-- 示例会话与问答记录
 -- ============================================================
-INSERT INTO student (id, student_no, name, major, grade)
+INSERT INTO chat_conversation (id, user_id, title, knowledge_base_id, created_at, updated_at)
+VALUES (1, 1, 'Java 集合怎么复习？', 1, NOW(), NOW())
+ON DUPLICATE KEY UPDATE title = VALUES(title), knowledge_base_id = VALUES(knowledge_base_id), updated_at = NOW();
+
+INSERT INTO chat_record (id, user_id, username, conversation_id, knowledge_base_id, question, answer, source_type, matched_chunk_ids, prompt_preview, llm_mode, retrieval_time_ms, generation_time_ms, created_at)
+VALUES (
+    1,
+    1,
+    'student',
+    1,
+    1,
+    'Java 集合怎么复习？',
+    '可以从 ArrayList、LinkedList、HashMap 的底层结构、扩容机制、时间复杂度和使用场景入手复习。',
+    'RAG',
+    '1',
+    '你是校园知识库智能助手，帮助学生解答课程相关问题。',
+    'mock',
+    5,
+    12,
+    NOW()
+)
+ON DUPLICATE KEY UPDATE answer = VALUES(answer), matched_chunk_ids = VALUES(matched_chunk_ids), prompt_preview = VALUES(prompt_preview), created_at = VALUES(created_at);
+
+-- ============================================================
+-- 学业数据
+-- ============================================================
+INSERT INTO student (id, user_id, student_no, name, major, grade)
 VALUES
-    (1, '20230001', '李明', '软件工程', '2023'),
-    (2, '20230002', '王同学', '软件工程', '2023')
-ON DUPLICATE KEY UPDATE name = VALUES(name), major = VALUES(major), grade = VALUES(grade);
+    (1, 1, '20230001', '李同学', '软件工程', '2023'),
+    (2, NULL, '20230002', '王同学', '软件工程', '2023')
+ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), name = VALUES(name), major = VALUES(major), grade = VALUES(grade);
 
 INSERT INTO course (id, course_code, course_name, credit)
 VALUES
