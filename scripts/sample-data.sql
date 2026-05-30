@@ -5,9 +5,10 @@ USE campus_ai;
 -- ============================================================
 INSERT INTO sys_user (id, username, password, nickname, role, status, created_at, updated_at)
 VALUES
-    (1, 'student', '$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36PQ4sLmzqJ3aYfFVL8PzLG', '李同学', 'STUDENT', 'ENABLED', NOW(), NOW()),
-    (2, 'teacher', '$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36PQ4sLmzqJ3aYfFVL8PzLG', '张老师', 'TEACHER', 'ENABLED', NOW(), NOW()),
-    (3, 'admin',   '$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36PQ4sLmzqJ3aYfFVL8PzLG', '管理员', 'ADMIN',   'ENABLED', NOW(), NOW())
+    (1, 'student',  '$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36PQ4sLmzqJ3aYfFVL8PzLG', '李同学', 'STUDENT', 'ENABLED', NOW(), NOW()),
+    (2, 'teacher',  '$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36PQ4sLmzqJ3aYfFVL8PzLG', '张老师', 'TEACHER', 'ENABLED', NOW(), NOW()),
+    (3, 'admin',    '$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36PQ4sLmzqJ3aYfFVL8PzLG', '管理员', 'ADMIN',   'ENABLED', NOW(), NOW()),
+    (4, 'student2', '$2a$10$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36PQ4sLmzqJ3aYfFVL8PzLG', '王同学', 'STUDENT', 'ENABLED', NOW(), NOW())
 ON DUPLICATE KEY UPDATE password = VALUES(password), nickname = VALUES(nickname), role = VALUES(role), status = VALUES(status), updated_at = NOW();
 
 -- ============================================================
@@ -80,7 +81,7 @@ ON DUPLICATE KEY UPDATE answer = VALUES(answer), matched_chunk_ids = VALUES(matc
 INSERT INTO student (id, user_id, student_no, name, major, grade)
 VALUES
     (1, 1, '20230001', '李同学', '软件工程', '2023'),
-    (2, NULL, '20230002', '王同学', '软件工程', '2023')
+    (2, 4, '20230002', '王同学', '软件工程', '2023')
 ON DUPLICATE KEY UPDATE user_id = VALUES(user_id), name = VALUES(name), major = VALUES(major), grade = VALUES(grade);
 
 INSERT INTO course (id, course_code, course_name, credit)

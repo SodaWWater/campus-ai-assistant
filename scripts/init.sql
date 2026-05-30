@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS kb_document_chunk (
 CREATE TABLE IF NOT EXISTS chat_conversation (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT NOT NULL,
-    title VARCHAR(100) NOT NULL,
+    title VARCHAR(200) NOT NULL DEFAULT '新对话',
     knowledge_base_id BIGINT,
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
