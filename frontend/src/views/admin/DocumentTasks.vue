@@ -37,7 +37,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import http from '../../api/http'
 
@@ -45,16 +45,39 @@ const documents = ref([])
 const chunks = ref([])
 const chunksVisible = ref(false)
 const loading = ref(false)
+let pollTimer = null
 
 onMounted(() => loadDocs())
+onUnmounted(() => {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+})
 
 async function loadDocs() {
   loading.value = true
   try {
     const data = await http.get('/admin/documents')
     documents.value = data || []
+    startPolling()
   } catch {}
   finally { loading.value = false }
+}
+
+/** 如果有 PROCESSING 状态的文档，每 3 秒自动刷新 */
+function startPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+  const hasProcessing = documents.value.some(d => d.status === 'PROCESSING')
+  if (hasProcessing) {
+    pollTimer = setInterval(async () => {
+      try {
+        const data = await http.get('/admin/documents')
+        documents.value = data || []
+        if (!documents.value.some(d => d.status === 'PROCESSING')) {
+          clearInterval(pollTimer)
+          pollTimer = null
+        }
+      } catch { /* 轮询静默失败 */ }
+    }, 3000)
+  }
 }
 
 function statusType(s) {

@@ -46,7 +46,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getTeacherKnowledgeBases, getDocuments, uploadDocument, getDocumentChunks, reprocessDocument } from '../../api/teacher'
@@ -62,6 +62,7 @@ const documents = ref([])
 const chunks = ref([])
 const chunksVisible = ref(false)
 const loading = ref(false)
+let pollTimer = null
 
 onMounted(async () => {
   try { kbList.value = await getTeacherKnowledgeBases() || [] } catch {}
@@ -69,6 +70,10 @@ onMounted(async () => {
     selectedKbId.value = currentKbId.value
     loadDocs(currentKbId.value)
   }
+})
+
+onUnmounted(() => {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
 })
 
 watch(() => props.kbId, (val) => {
@@ -87,6 +92,25 @@ async function loadDocs(kbId) {
   kbName.value = kb?.name || ''
   try { documents.value = await getDocuments(kbId) || [] } catch {}
   finally { loading.value = false }
+  startPolling()
+}
+
+/** 如果有 PROCESSING 状态的文档，每 3 秒自动刷新 */
+function startPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+  const hasProcessing = documents.value.some(d => d.status === 'PROCESSING')
+  if (hasProcessing && selectedKbId.value > 0) {
+    pollTimer = setInterval(async () => {
+      try {
+        documents.value = await getDocuments(selectedKbId.value) || []
+        if (!documents.value.some(d => d.status === 'PROCESSING')) {
+          // 全部处理完毕，停止轮询
+          clearInterval(pollTimer)
+          pollTimer = null
+        }
+      } catch { /* 轮询静默失败 */ }
+    }, 3000)
+  }
 }
 
 function statusType(status) {
@@ -111,12 +135,12 @@ async function handleUpload(file) {
   formData.append('file', file)
   try {
     await uploadDocument(selectedKbId.value, formData)
-    ElMessage.success('上传成功')
-    loadDocs(selectedKbId.value)
+    ElMessage.success('上传成功，后台处理中...')
+    loadDocs(selectedKbId.value)  // 立即刷新，触发轮询
   } catch (e) {
     ElMessage.error('上传失败')
   }
-  return false // 阻止 el-upload 默认上传
+  return false
 }
 
 async function viewChunks(docId) {
@@ -129,7 +153,7 @@ async function viewChunks(docId) {
 async function reprocessDoc(docId) {
   try {
     await reprocessDocument(docId)
-    ElMessage.success('已提交重新解析')
+    ElMessage.success('已提交重新解析，后台处理中...')
     loadDocs(selectedKbId.value)
   } catch {}
 }

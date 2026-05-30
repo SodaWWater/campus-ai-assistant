@@ -50,6 +50,10 @@ app:
     document-exchange: campus.ai.document.exchange
     document-routing-key: document.process
     document-queue: campus.ai.document.process.queue
+    dlx-exchange: campus.ai.document.dlx.exchange
+    dlx-routing-key: document.dlq
+    dlq-queue: campus.ai.document.dlq.queue
+    max-retry-count: 3
   jwt:
     secret: campus-ai-assistant-secret-key-2025-demo
     expiration-ms: 86400000

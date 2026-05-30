@@ -129,17 +129,19 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         String title = fileName.lastIndexOf('.') > 0 ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
         Long documentId = createDocumentRecord(knowledgeBaseId, title, content, fileName, fileType, fileSize);
 
-        // 主路径：同步处理，确保文档立即可用
-        processDocumentChunks(documentId);
-
-        // 异步路径：同时投递 MQ，消费者做幂等处理（多实例场景优化）
+        // 纯异步：投递 MQ，由 Consumer 异步处理，上传接口立即返回
         DocumentProcessMessage message = new DocumentProcessMessage();
         message.setDocumentId(documentId);
         message.setKnowledgeBaseId(knowledgeBaseId);
         try {
             rabbitTemplate.convertAndSend(documentExchange, documentRoutingKey, message);
-        } catch (Exception ignored) {
-            // MQ 不可用不影响主流程，文档已同步处理完毕
+        } catch (Exception e) {
+            // MQ 不可用时降级为同步处理
+            try {
+                processDocumentChunks(documentId);
+            } catch (Exception pe) {
+                markDocumentFailed(documentId, pe.getMessage());
+            }
         }
         return documentId;
     }
@@ -172,35 +174,43 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
             throw new BusinessException(ErrorCode.NOT_FOUND, "document not found");
         }
 
+        chunkService.lambdaUpdate().eq(KbDocumentChunk::getDocumentId, documentId).remove();
+        List<String> chunks = textChunker.split(document.getContent());
+        for (int i = 0; i < chunks.size(); i++) {
+            KbDocumentChunk chunk = new KbDocumentChunk();
+            chunk.setDocumentId(document.getId());
+            chunk.setKnowledgeBaseId(document.getKnowledgeBaseId());
+            chunk.setChunkIndex(i);
+            chunk.setContent(chunks.get(i));
+            chunk.setKeywords(keywordMatcher.extractKeywords(chunks.get(i)));
+            chunk.setCreatedAt(LocalDateTime.now());
+            chunkService.save(chunk);
+        }
+
+        // 更新文档状态为 DONE
+        document.setStatus("DONE");
+        document.setChunkCount(chunks.size());
+        document.setProcessedAt(LocalDateTime.now());
+        document.setUpdatedAt(LocalDateTime.now());
+        documentService.updateById(document);
+
+        // 更新知识库计数
+        updateKbCounts(document.getKnowledgeBaseId());
+    }
+
+    /**
+     * 标记文档处理失败（在事务外调用，确保 FAILED 状态持久化）
+     */
+    private void markDocumentFailed(Long documentId, String errorMessage) {
         try {
-            chunkService.lambdaUpdate().eq(KbDocumentChunk::getDocumentId, documentId).remove();
-            List<String> chunks = textChunker.split(document.getContent());
-            for (int i = 0; i < chunks.size(); i++) {
-                KbDocumentChunk chunk = new KbDocumentChunk();
-                chunk.setDocumentId(document.getId());
-                chunk.setKnowledgeBaseId(document.getKnowledgeBaseId());
-                chunk.setChunkIndex(i);
-                chunk.setContent(chunks.get(i));
-                chunk.setKeywords(keywordMatcher.extractKeywords(chunks.get(i)));
-                chunk.setCreatedAt(LocalDateTime.now());
-                chunkService.save(chunk);
+            KbDocument document = documentService.getById(documentId);
+            if (document != null && !"DONE".equals(document.getStatus())) {
+                document.setStatus("FAILED");
+                document.setErrorMessage(errorMessage);
+                document.setUpdatedAt(LocalDateTime.now());
+                documentService.updateById(document);
             }
-
-            // 更新文档状态为 DONE
-            document.setStatus("DONE");
-            document.setChunkCount(chunks.size());
-            document.setProcessedAt(LocalDateTime.now());
-            document.setUpdatedAt(LocalDateTime.now());
-            documentService.updateById(document);
-
-            // 更新知识库计数
-            updateKbCounts(document.getKnowledgeBaseId());
-
-        } catch (Exception e) {
-            document.setStatus("FAILED");
-            document.setErrorMessage(e.getMessage() != null ? e.getMessage().substring(0, Math.min(e.getMessage().length(), 500)) : "未知错误");
-            document.setUpdatedAt(LocalDateTime.now());
-            documentService.updateById(document);
+        } catch (Exception ignored) {
         }
     }
 
@@ -246,13 +256,19 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         document.setUpdatedAt(LocalDateTime.now());
         documentService.updateById(document);
 
+        // 纯异步：重置状态后投递 MQ 重新处理
         DocumentProcessMessage message = new DocumentProcessMessage();
         message.setDocumentId(documentId);
         message.setKnowledgeBaseId(document.getKnowledgeBaseId());
         try {
             rabbitTemplate.convertAndSend(documentExchange, documentRoutingKey, message);
-        } catch (Exception ignored) {
-            processDocumentChunks(documentId);
+        } catch (Exception e) {
+            // MQ 不可用时降级为同步处理
+            try {
+                processDocumentChunks(documentId);
+            } catch (Exception pe) {
+                markDocumentFailed(documentId, pe.getMessage());
+            }
         }
     }
 
