@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS kb_document (
     title VARCHAR(200) NOT NULL,
     content TEXT NOT NULL,
     file_name VARCHAR(255) NOT NULL DEFAULT '',
-    file_type VARCHAR(20) NOT NULL DEFAULT 'txt' COMMENT 'txt / md',
+    file_type VARCHAR(20) NOT NULL DEFAULT 'txt' COMMENT 'txt / md / pdf / docx / doc',
     file_size BIGINT NOT NULL DEFAULT 0,
     status VARCHAR(20) NOT NULL DEFAULT 'PROCESSING' COMMENT 'PROCESSING / DONE / FAILED',
     error_message VARCHAR(500),
@@ -61,10 +61,22 @@ CREATE TABLE IF NOT EXISTS kb_document_chunk (
     INDEX idx_chunk_document_id (document_id)
 );
 
+CREATE TABLE IF NOT EXISTS chat_conversation (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    title VARCHAR(100) NOT NULL,
+    knowledge_base_id BIGINT,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    INDEX idx_conversation_user_id (user_id),
+    INDEX idx_conversation_kb_id (knowledge_base_id)
+);
+
 CREATE TABLE IF NOT EXISTS chat_record (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT NOT NULL,
     username VARCHAR(50) NOT NULL DEFAULT '',
+    conversation_id BIGINT,
     knowledge_base_id BIGINT NOT NULL DEFAULT 0,
     question TEXT NOT NULL,
     answer TEXT NOT NULL,
@@ -76,15 +88,18 @@ CREATE TABLE IF NOT EXISTS chat_record (
     generation_time_ms BIGINT NOT NULL DEFAULT 0,
     created_at DATETIME NOT NULL,
     INDEX idx_chat_user_id (user_id),
+    INDEX idx_chat_conversation_id (conversation_id),
     INDEX idx_chat_kb_id (knowledge_base_id)
 );
 
 CREATE TABLE IF NOT EXISTS student (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT,
     student_no VARCHAR(50) NOT NULL UNIQUE,
     name VARCHAR(50) NOT NULL,
     major VARCHAR(100),
-    grade VARCHAR(20)
+    grade VARCHAR(20),
+    INDEX idx_student_user_id (user_id)
 );
 
 CREATE TABLE IF NOT EXISTS course (
