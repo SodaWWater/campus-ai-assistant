@@ -40,6 +40,7 @@ public class ChatServiceImpl implements ChatService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final RagMetrics ragMetrics;
     private final KnowledgeBaseService knowledgeBaseService;
+    private final ConversationCompressor conversationCompressor;
 
     @Value("${llm.mode:mock}")
     private String llmMode;
@@ -58,7 +59,8 @@ public class ChatServiceImpl implements ChatService {
                            SpringAiChatClientLlmClient springAiChatClientLlmClient,
                            RedisTemplate<String, Object> redisTemplate,
                            RagMetrics ragMetrics,
-                           KnowledgeBaseService knowledgeBaseService) {
+                           KnowledgeBaseService knowledgeBaseService,
+                           ConversationCompressor conversationCompressor) {
         this.questionRouter = questionRouter;
         this.ragService = ragService;
         this.academicService = academicService;
@@ -71,6 +73,7 @@ public class ChatServiceImpl implements ChatService {
         this.redisTemplate = redisTemplate;
         this.ragMetrics = ragMetrics;
         this.knowledgeBaseService = knowledgeBaseService;
+        this.conversationCompressor = conversationCompressor;
     }
 
     @Override
@@ -191,6 +194,9 @@ public class ChatServiceImpl implements ChatService {
         try {
             String key = "chat:conv:" + conversationId;
             List<Object> list = redisTemplate.opsForList().range(key, 0, -1);
+            String rawHistory;
+            int turnCount;
+
             if (list == null || list.isEmpty()) {
                 List<ChatRecord> records = chatRecordService.lambdaQuery()
                         .eq(ChatRecord::getConversationId, conversationId)
@@ -201,11 +207,16 @@ public class ChatServiceImpl implements ChatService {
                     return null;
                 }
                 Collections.reverse(records);
-                return records.stream()
+                rawHistory = records.stream()
                         .map(r -> "用户: " + r.getQuestion() + "\n助手: " + r.getAnswer())
                         .collect(Collectors.joining("\n"));
+                turnCount = records.size();
+            } else {
+                rawHistory = String.join("\n", list.stream().map(Object::toString).toList());
+                turnCount = list.size() / 2; // 2 entries per Q&A turn
             }
-            return String.join("\n", list.stream().map(Object::toString).toList());
+
+            return conversationCompressor.process(rawHistory, turnCount);
         } catch (Exception e) {
             return null;
         }

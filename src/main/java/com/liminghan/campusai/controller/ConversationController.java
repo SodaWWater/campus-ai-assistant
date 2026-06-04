@@ -3,8 +3,10 @@ package com.liminghan.campusai.controller;
 import com.liminghan.campusai.common.BusinessException;
 import com.liminghan.campusai.common.ErrorCode;
 import com.liminghan.campusai.common.Result;
+import com.liminghan.campusai.entity.ChatRecord;
 import com.liminghan.campusai.entity.Conversation;
 import com.liminghan.campusai.security.SecurityUtils;
+import com.liminghan.campusai.service.ChatRecordService;
 import com.liminghan.campusai.service.ConversationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,9 +22,12 @@ import java.util.Map;
 public class ConversationController {
 
     private final ConversationService conversationService;
+    private final ChatRecordService chatRecordService;
 
-    public ConversationController(ConversationService conversationService) {
+    public ConversationController(ConversationService conversationService,
+                                   ChatRecordService chatRecordService) {
         this.conversationService = conversationService;
+        this.chatRecordService = chatRecordService;
     }
 
     @Operation(summary = "获取当前用户的对话列表")
@@ -61,6 +66,8 @@ public class ConversationController {
             throw new BusinessException(ErrorCode.NOT_FOUND, "对话不存在或无权删除");
         }
         conversationService.removeById(id);
+        // Cascade: delete all chat records of this conversation
+        chatRecordService.lambdaUpdate().eq(ChatRecord::getConversationId, id).remove();
         return Result.success("ok");
     }
 

@@ -53,6 +53,9 @@ app:
     knowledge-base-list-ttl-minutes: 1
     faq-ttl-minutes: 5
     context-ttl-hours: 1
+  chat:
+    max-history-tokens: 3000
+    compress-after-turns: 8
   vector:
     enabled: ${VECTOR_SEARCH_ENABLED:true}
     dimension: ${VECTOR_DIMENSION:128}
