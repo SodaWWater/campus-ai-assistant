@@ -23,6 +23,9 @@
         >
           <span>{{ conv.title }}</span>
           <small>{{ formatTime(conv.updatedAt) }}</small>
+          <el-button class="conv-delete" size="small" text type="danger" @click.stop="deleteConv(conv.id)" title="删除对话">
+            <el-icon><Delete /></el-icon>
+          </el-button>
         </button>
       </div>
     </aside>
@@ -353,8 +356,10 @@ h3 {
 
 .conversation-item {
   display: grid;
+  grid-template-columns: 1fr auto;
   gap: 5px;
   padding: 11px 12px;
+  align-items: center;
 }
 
 .conversation-item span {
@@ -372,10 +377,23 @@ h3 {
   background: #eff6ff;
 }
 
+.conv-delete {
+  grid-row: 1 / 3;
+  grid-column: 2;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.conversation-item:hover .conv-delete {
+  opacity: 1;
+}
+
 .dialog-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr auto;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .dialog-header,
@@ -393,8 +411,10 @@ h3 {
 }
 
 .message-stream {
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 24px;
+  min-height: 0;
 }
 
 .empty-state {
