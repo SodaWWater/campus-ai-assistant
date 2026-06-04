@@ -2,6 +2,11 @@ server:
   port: 8081
 
 spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
   application:
     name: campus-ai-assistant
   datasource:
@@ -22,7 +27,7 @@ spring:
   ai:
     openai:
       base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
-      api-key: ${DEEPSEEK_API_KEY:sk-68f8b817a540496189bd271a44a88a5c}
+      api-key: ${DEEPSEEK_API_KEY:sk-placeholder}
       chat:
         options:
           model: ${DEEPSEEK_MODEL:deepseek-chat}
@@ -35,17 +40,17 @@ mybatis-plus:
       id-type: auto
 
 llm:
-  mode: real
+  mode: ${LLM_MODE:mock}
   provider: deepseek
-  base-url: https://api.deepseek.com
-  api-key: ${DEEPSEEK_API_KEY:sk-68f8b817a540496189bd271a44a88a5c}
-  model: deepseek-chat
+  base-url: ${DEEPSEEK_BASE_URL:https://api.deepseek.com}
+  api-key: ${DEEPSEEK_API_KEY:}
+  model: ${DEEPSEEK_MODEL:deepseek-chat}
 
 app:
   cache:
-    knowledge-base-list-ttl-minutes: 10
-    faq-ttl-minutes: 30
-    context-ttl-hours: 2
+    knowledge-base-list-ttl-minutes: 1
+    faq-ttl-minutes: 5
+    context-ttl-hours: 1
   mq:
     document-exchange: campus.ai.document.exchange
     document-routing-key: document.process
@@ -55,7 +60,7 @@ app:
     dlq-queue: campus.ai.document.dlq.queue
     max-retry-count: 3
   jwt:
-    secret: campus-ai-assistant-secret-key-2025-demo
+    secret: ${JWT_SECRET:campus-ai-assistant-demo-secret-key-change-me-2026}
     expiration-ms: 86400000
 
 springdoc:

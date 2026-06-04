@@ -7,6 +7,8 @@ services:
       MYSQL_DATABASE: campus_ai
       MYSQL_USER: campus_ai
       MYSQL_PASSWORD: campus_ai
+      LANG: C.UTF-8
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     ports:
       - "3306:3306"
     volumes:

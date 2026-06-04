@@ -27,8 +27,9 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public LoginResponse login(String username, String password) {
         CampusUserDetails userDetails = (CampusUserDetails) userDetailsService.loadUserByUsername(username);
+        String storedHash = userDetails.getPassword();
 
-        if (!passwordEncoder.matches(password, userDetails.getPassword())) {
+        if (!passwordEncoder.matches(password, storedHash)) {
             throw new BadCredentialsException("密码错误");
         }
 
@@ -47,3 +48,4 @@ public class AuthServiceImpl implements AuthService {
         );
     }
 }
+
