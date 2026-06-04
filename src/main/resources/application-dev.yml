@@ -12,7 +12,8 @@ spring:
     host: ${RABBITMQ_HOST:localhost}
 
 llm:
-  mode: ${LLM_MODE:mock}
+  mode: real
+  api-key: sk-ead7f0b1d3e14bd38b0be18c23bae35d
 
 app:
   jwt:

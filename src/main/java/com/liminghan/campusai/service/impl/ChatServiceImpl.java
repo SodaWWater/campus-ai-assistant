@@ -113,9 +113,12 @@ public class ChatServiceImpl implements ChatService {
             }
 
             String prompt;
-            // Check if we have meaningfully relevant chunks (best score > 10)
+            // Check if we have meaningfully relevant chunks (best score > 25%)
             boolean hasRelevantChunks = !matchedChunks.isEmpty()
-                    && matchedChunks.get(0).getScore() > 10;
+                    && matchedChunks.get(0).getScore() > 25;
+            log.debug("RAG retrieval: topScore={}, chunkCount={}, kbId={}",
+                    matchedChunks.isEmpty() ? 0 : matchedChunks.get(0).getScore(),
+                    matchedChunks.size(), request.getKnowledgeBaseId());
 
             if (hasSelectedKnowledgeBase && !hasRelevantChunks) {
                 String kbName = getKnowledgeBaseName(request.getKnowledgeBaseId());
