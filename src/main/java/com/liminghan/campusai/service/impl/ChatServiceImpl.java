@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -75,13 +76,9 @@ public class ChatServiceImpl implements ChatService {
         long retrievalTimeMs = 0;
         long generationTimeMs = 0;
 
-        // 确保会话存在
         Long conversationId = ensureConversation(request);
-
-        // 读取该对话的历史
         String history = loadConversationHistory(conversationId);
 
-        // FAQ 缓存
         String faqKey = "chat:faq:" + Integer.toHexString(Objects.hash(request.getKnowledgeBaseId(), request.getQuestion()));
         String cachedAnswer = readStringCache(faqKey);
 
@@ -90,41 +87,43 @@ public class ChatServiceImpl implements ChatService {
         } else if (questionType == QuestionType.ACADEMIC_QUERY) {
             answer = academicService.answerAcademicQuestion(request.getQuestion());
         } else {
-            // ── RAG 检索（作为辅助参考资料） ──
             List<KbDocumentChunk> rawChunks = List.of();
-            if (request.getKnowledgeBaseId() != null && request.getKnowledgeBaseId() > 0) {
+            boolean hasSelectedKnowledgeBase = request.getKnowledgeBaseId() != null && request.getKnowledgeBaseId() > 0;
+
+            if (hasSelectedKnowledgeBase) {
                 long retrievalStart = System.currentTimeMillis();
                 try {
                     rawChunks = ragService.retrieveTopK(request.getKnowledgeBaseId(), request.getQuestion(), 5);
                     matchedChunks = ragService.retrieveTopKWithScore(request.getKnowledgeBaseId(), request.getQuestion(), 5);
                 } catch (Exception e) {
-                    log.warn("RAG检索失败: {}", e.getMessage());
+                    log.warn("RAG retrieval failed: {}", e.getMessage());
                 }
                 retrievalTimeMs = System.currentTimeMillis() - retrievalStart;
             }
 
-            // ── 构造 Prompt ──
             String prompt;
-            if (!rawChunks.isEmpty()) {
+            if (hasSelectedKnowledgeBase && rawChunks.isEmpty()) {
+                prompt = "知识库命中不足，未调用 LLM。问题：" + request.getQuestion();
+                answer = buildInsufficientKnowledgeAnswer(request.getQuestion());
+            } else if (!rawChunks.isEmpty()) {
                 prompt = promptBuilder.buildRagPrompt(request.getQuestion(), rawChunks, history);
+                long generationStart = System.currentTimeMillis();
+                answer = chooseClient().generate(prompt);
+                generationTimeMs = System.currentTimeMillis() - generationStart;
             } else {
                 prompt = promptBuilder.buildGeneralPrompt(request.getQuestion(), history);
+                long generationStart = System.currentTimeMillis();
+                answer = chooseClient().generate(prompt);
+                generationTimeMs = System.currentTimeMillis() - generationStart;
             }
-            // 截断过长 Prompt
+
             promptPreview = prompt.length() > 500 ? prompt.substring(0, 500) + "..." : prompt;
 
-            // ── 始终调用 LLM ──
-            long generationStart = System.currentTimeMillis();
-            answer = chooseClient().generate(prompt);
-            generationTimeMs = System.currentTimeMillis() - generationStart;
-
-            // FAQ 缓存
-            if (request.getKnowledgeBaseId() != null && !matchedChunks.isEmpty()) {
+            if (hasSelectedKnowledgeBase && !matchedChunks.isEmpty()) {
                 writeValueCache(faqKey, answer, Duration.ofMinutes(faqTtlMinutes));
             }
         }
 
-        // 保存消息
         ChatRecord record = saveChatRecord(request, conversationId, questionType, matchedChunks,
                 answer, promptPreview, retrievalTimeMs, generationTimeMs);
 
@@ -132,9 +131,6 @@ public class ChatServiceImpl implements ChatService {
                 retrievalTimeMs, generationTimeMs);
     }
 
-    /**
-     * 确保会话存在：如果有 conversationId 就用已有的，否则自动创建
-     */
     private Long ensureConversation(ChatAskRequest request) {
         if (request.getConversationId() != null && request.getConversationId() > 0) {
             Conversation conv = conversationService.getById(request.getConversationId());
@@ -144,7 +140,7 @@ public class ChatServiceImpl implements ChatService {
                 return conv.getId();
             }
         }
-        // 自动创建新对话
+
         Conversation conv = new Conversation();
         conv.setUserId(request.getUserId() != null ? request.getUserId() : 1L);
         conv.setKnowledgeBaseId(request.getKnowledgeBaseId());
@@ -159,23 +155,20 @@ public class ChatServiceImpl implements ChatService {
         return conv.getId();
     }
 
-    /**
-     * 读取对话历史（最近 10 轮，存 Redis）
-     */
     private String loadConversationHistory(Long conversationId) {
         try {
             String key = "chat:conv:" + conversationId;
             List<Object> list = redisTemplate.opsForList().range(key, 0, -1);
             if (list == null || list.isEmpty()) {
-                // 回退：从数据库加载最近 10 轮
                 List<ChatRecord> records = chatRecordService.lambdaQuery()
                         .eq(ChatRecord::getConversationId, conversationId)
                         .orderByDesc(ChatRecord::getCreatedAt)
                         .last("limit 20")
                         .list();
-                if (records.isEmpty()) return null;
-                // 按时间正序排列
-                java.util.Collections.reverse(records);
+                if (records.isEmpty()) {
+                    return null;
+                }
+                Collections.reverse(records);
                 return records.stream()
                         .map(r -> "用户: " + r.getQuestion() + "\n助手: " + r.getAnswer())
                         .collect(Collectors.joining("\n"));
@@ -186,16 +179,25 @@ public class ChatServiceImpl implements ChatService {
         }
     }
 
-    private com.liminghan.campusai.service.LlmClient chooseClient() {
+    private LlmClient chooseClient() {
         if ("real".equalsIgnoreCase(llmMode)) return deepSeekLlmClient;
         if ("spring-ai".equalsIgnoreCase(llmMode)) return springAiChatClientLlmClient;
         return mockLlmClient;
     }
 
+    private String buildInsufficientKnowledgeAnswer(String question) {
+        return "当前知识库资料不足，暂时无法基于可信课程资料回答这个问题。\n\n"
+                + "你可以尝试：\n"
+                + "1. 切换到更相关的课程知识库；\n"
+                + "2. 使用更具体的关键词重新提问；\n"
+                + "3. 请教师补充相关讲义、实验指导或复习资料。\n\n"
+                + "原问题：" + question;
+    }
+
     private ChatRecord saveChatRecord(ChatAskRequest request, Long conversationId,
-                                       QuestionType questionType, List<MatchedChunkVO> chunks,
-                                       String answer, String promptPreview,
-                                       long retrievalTimeMs, long generationTimeMs) {
+                                      QuestionType questionType, List<MatchedChunkVO> chunks,
+                                      String answer, String promptPreview,
+                                      long retrievalTimeMs, long generationTimeMs) {
         ChatRecord record = new ChatRecord();
         record.setUserId(request.getUserId() != null ? request.getUserId() : 1L);
         record.setUsername(request.getUsername() != null ? request.getUsername() : "");
@@ -212,7 +214,6 @@ public class ChatServiceImpl implements ChatService {
         record.setCreatedAt(LocalDateTime.now());
         chatRecordService.save(record);
 
-        // 更新 Redis 中的对话历史
         appendConversationHistory(conversationId, request.getQuestion(), answer);
         return record;
     }
@@ -222,15 +223,15 @@ public class ChatServiceImpl implements ChatService {
             String key = "chat:conv:" + conversationId;
             redisTemplate.opsForList().rightPush(key, "用户: " + question);
             redisTemplate.opsForList().rightPush(key, "助手: " + answer);
-            redisTemplate.opsForList().trim(key, -20, -1); // 保留最近 10 轮（20 条）
+            redisTemplate.opsForList().trim(key, -20, -1);
             redisTemplate.expire(key, Duration.ofHours(24));
         } catch (Exception ignored) {
         }
     }
 
     private ChatResponseVO buildResponse(ChatRecord record, Long conversationId, QuestionType questionType,
-                                          List<MatchedChunkVO> matchedChunks, String answer,
-                                          String promptPreview, long retrievalTimeMs, long generationTimeMs) {
+                                         List<MatchedChunkVO> matchedChunks, String answer,
+                                         String promptPreview, long retrievalTimeMs, long generationTimeMs) {
         ChatResponseVO response = new ChatResponseVO();
         response.setAnswer(answer);
         response.setSourceType(questionType.name());
@@ -260,3 +261,4 @@ public class ChatServiceImpl implements ChatService {
         }
     }
 }
+
