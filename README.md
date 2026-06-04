@@ -116,3 +116,13 @@ mvn spring-boot:run
 可以将项目描述为：
 
 > 面向高校课程资料管理与智能答疑场景的多角色 RAG 知识库平台，支持教师资料维护、学生溯源问答、管理员审核治理、文档异步解析和结构化学业查询。项目引入 MIT OCW、OpenDSA 等开放教育资源作为真实资料来源，并通过引用卡片提升回答可信度。
+
+面试准备材料：
+
+- `docs/architecture.md`：总体架构、分层职责与关键代码入口
+- `docs/demo-script.md`：5 分钟现场演示脚本与代码定位
+- `docs/rag-deep-dive.md`：RAG 文档处理、chunk 规则、关键词提取、pgvector 索引深度讲解
+- `docs/interview-playbook.md`：30 秒、2 分钟、5 分钟讲解模板
+- `docs/interview-code-walkthrough.md`：核心流程与关键代码讲解
+- `docs/interview-qa.md`：高频面试问答
+- `docs/resume-description.md`：简历描述与谨慎表述

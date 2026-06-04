@@ -56,9 +56,18 @@ app:
   vector:
     enabled: ${VECTOR_SEARCH_ENABLED:true}
     dimension: ${VECTOR_DIMENSION:128}
+    hnsw-enabled: ${VECTOR_HNSW_ENABLED:true}
     jdbc-url: ${VECTOR_DB_URL:jdbc:postgresql://localhost:5433/campus_ai_vector}
     username: ${VECTOR_DB_USERNAME:campus_ai}
     password: ${VECTOR_DB_PASSWORD:campus_ai}
+  embedding:
+    mode: ${EMBEDDING_MODE:hashing}
+    provider: ${EMBEDDING_PROVIDER:openai-compatible}
+    base-url: ${EMBEDDING_BASE_URL:}
+    api-key: ${EMBEDDING_API_KEY:}
+    model: ${EMBEDDING_MODEL:text-embedding-3-small}
+    dimension: ${EMBEDDING_DIMENSION:${VECTOR_DIMENSION:128}}
+    send-dimensions: ${EMBEDDING_SEND_DIMENSIONS:true}
   mq:
     document-exchange: campus.ai.document.exchange
     document-routing-key: document.process

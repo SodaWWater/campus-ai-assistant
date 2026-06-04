@@ -12,36 +12,37 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
-public class HashingEmbeddingService {
+public class HashingEmbeddingService implements EmbeddingClient {
 
     private static final Pattern TOKEN_PATTERN = Pattern.compile("[\\p{IsHan}]{2,}|[a-zA-Z0-9_+#.-]{2,}");
 
     private final int dimension;
 
-    public HashingEmbeddingService(@Value("${app.vector.dimension:128}") int dimension) {
+    public HashingEmbeddingService(@Value("${app.embedding.dimension:128}") int dimension) {
         this.dimension = dimension;
     }
 
-    public double[] embed(String text) {
+    @Override
+    public EmbeddingVector embed(String text) {
         double[] vector = new double[dimension];
         for (String token : tokenize(text)) {
             int index = Math.floorMod(hash(token), dimension);
             vector[index] += 1.0;
         }
         normalize(vector);
-        return vector;
+        return new EmbeddingVector(vector, provider(), model(), dimension);
     }
 
-    public String toPgVectorLiteral(double[] vector) {
-        StringBuilder sb = new StringBuilder("[");
-        for (int i = 0; i < vector.length; i++) {
-            if (i > 0) {
-                sb.append(',');
-            }
-            sb.append(String.format(Locale.ROOT, "%.6f", vector[i]));
-        }
-        sb.append(']');
-        return sb.toString();
+    public int dimension() {
+        return dimension;
+    }
+
+    public String provider() {
+        return "local";
+    }
+
+    public String model() {
+        return "hashing-embedding";
     }
 
     private List<String> tokenize(String text) {
@@ -91,4 +92,3 @@ public class HashingEmbeddingService {
         return token.codePoints().anyMatch(code -> Character.UnicodeScript.of(code) == Character.UnicodeScript.HAN);
     }
 }
-

@@ -1,86 +1,194 @@
-# 演示脚本
+# 5 分钟演示脚本
 
-## 演示目标
+本文档用于面试现场演示。目标不是把所有功能点点一遍，而是用 5 分钟证明项目已经从 Demo 问答升级为“资料可维护、答案可溯源、角色有边界、后台可治理”的校园课程知识库平台。
 
-展示 Campus Knowledge Hub 已从普通 AI 问答 Demo 升级为一个真实感更强的校园课程知识库平台：资料来源可信、页面角色清晰、问答可溯源、后台可治理。
+## 演示准备
 
-## 准备
+- 后端：`http://localhost:8081`
+- 前端：`http://localhost:5173`
+- 演示账号：`student / 123456`、`teacher / 123456`、`admin / 123456`
+- 资料边界：样例资料位于 `docs/sample-materials/`，包含 Java、数据结构、数据库、校园学习事务指南等主题。
 
-- 后端运行在 `http://localhost:8081`
-- 前端运行在 `http://localhost:5173`
-- 后端启动时会自动执行 `scripts/init.sql` 和 `scripts/sample-data.sql`
-- 演示账号：`student / teacher / admin`，密码均为 `123456`
+## 0. 开场 20 秒
 
-## 1. 教师维护课程资料
+话术：
 
-1. 使用 `teacher / 123456` 登录。
-2. 进入“知识库管理”。
-3. 说明知识库不再是单条演示文本，而是按课程组织：
-   - Java 程序设计与软件构造
-   - 数据结构与算法 Java 版
-   - 数据库系统基础
-   - 校园学习事务指南
-4. 打开《Java 程序设计与软件构造》的文档中心。
-5. 展示资料来源：
-   - MIT OCW 6.005
-   - Open Data Structures
-   - 校内实验指导
-6. 展示文档状态、片段数量、解析时间和片段详情。
+> 这个项目不是简单把问题转发给大模型，而是围绕校园课程资料做了一个完整的 RAG 闭环。教师维护知识库，学生基于资料提问并看到引用来源，管理员监控用户、资料和任务状态。后端用 Spring Boot、MyBatis-Plus、Redis、RabbitMQ、Spring Security/JWT 和可选 pgvector 检索层实现。
 
-讲解话术：
+对应代码：
 
-> 教师端关注的是课程资料运营，不只是上传文件。每个知识库都能看到公开范围、资料来源、文档处理状态和知识片段，这样更接近真实教学平台。
+- `src/main/java/com/liminghan/campusai/controller/ChatController.java`
+- `src/main/java/com/liminghan/campusai/controller/KnowledgeBaseController.java`
+- `src/main/java/com/liminghan/campusai/controller/TeacherController.java`
+- `src/main/java/com/liminghan/campusai/controller/AdminController.java`
 
-## 2. 学生进行溯源问答
+## 1. 学生端：可溯源问答 90 秒
+
+操作：
 
 1. 使用 `student / 123456` 登录。
-2. 进入“智能答疑”。
-3. 选择《Java 程序设计与软件构造》知识库。
+2. 进入智能答疑工作台。
+3. 选择 Java 或数据库知识库。
 4. 提问：`ArrayList 和 LinkedList 怎么选？`
-5. 展示回答正文、引用标签和右侧来源卡片。
-6. 继续追问：`如果频繁在中间插入元素呢？`
+5. 展示回答正文、引用来源、命中的知识片段、检索/生成耗时。
 
-讲解话术：
+话术：
 
-> 学生端采用 AI 工作台布局。左侧是会话，中间是问答，右侧是引用来源。回答不是凭空生成，而是返回命中的知识片段，学生可以看到来源平台、资料标题和匹配分数。
+> 学生提问后，后端不会直接让模型自由发挥。`ChatServiceImpl` 会先做问题路由，课程资料类问题进入 RAG；`RagServiceImpl` 检索知识片段；`PromptBuilder` 把问题和片段组织成 Prompt；最后把答案、引用片段和耗时一起返回前端。
 
-## 3. 展示数据库课程知识库
+对应代码：
 
-1. 切换到《数据库系统基础》知识库。
-2. 提问：`事务 ACID 分别是什么意思？`
-3. 展示数据库课程资料命中的片段。
-4. 提问：`索引为什么能提升查询速度？`
+```java
+// ChatController.java
+@PostMapping("/ask")
+public Result<ChatResponse> ask(@RequestBody ChatRequest request) {
+    return Result.success(chatService.ask(request));
+}
+```
 
-讲解话术：
+```java
+// ChatServiceImpl.java
+QuestionType questionType = questionRouter.route(request.getQuestion());
+List<KbDocumentChunk> matchedChunks = ragService.retrieveTopK(knowledgeBaseId, request.getQuestion(), 5);
+String prompt = promptBuilder.buildRagPrompt(request.getQuestion(), matchedChunks);
+String answer = llmClient.chat(prompt);
+```
 
-> 不同课程知识库可以独立维护。数据库知识库引用智慧高教课程主题和本地整理讲义，适合展示课程级资料隔离。
+可追问回答：
 
-## 4. 展示结构化学业查询
+> 引用不是前端写死的，而是后端返回的 `matchedChunks`。前端只负责把 chunk 的文档标题、来源类型、匹配分数和片段内容展示出来。
 
-1. 在学生端提问：`我的数据库成绩怎么样？`
-2. 说明系统会通过问题路由识别为学业查询。
-3. 展示结构化成绩结果。
+## 2. 教师端：资料维护与异步处理 90 秒
 
-讲解话术：
+操作：
 
-> 对成绩这类确定性数据，系统不交给大模型生成，而是直接查 MySQL，避免模型编造分数。这体现了 RAG 系统和业务数据系统的边界设计。
+1. 使用 `teacher / 123456` 登录。
+2. 进入知识库管理。
+3. 打开某个知识库的文档中心。
+4. 展示文档状态、片段数、解析耗时、来源说明。
 
-## 5. 管理员查看平台运营
+话术：
+
+> 教师端不是只上传一个文件，而是维护课程资料资产。上传后先保存文档记录，再通过 RabbitMQ 发送处理消息，由消费者异步抽取文本、切片、入库、建立可选向量索引，并更新状态。这样上传接口不会被长时间阻塞，失败任务也能在后台被看到。
+
+对应代码：
+
+```java
+// KnowledgeBaseServiceImpl.java
+document.setStatus("PROCESSING");
+documentService.save(document);
+DocumentProcessMessage message = new DocumentProcessMessage();
+message.setDocumentId(documentId);
+message.setKnowledgeBaseId(knowledgeBaseId);
+rabbitTemplate.convertAndSend(documentExchange, documentRoutingKey, message);
+```
+
+```java
+// DocumentProcessConsumer.java
+@RabbitListener(queues = "${app.mq.document-queue}")
+public void consume(DocumentProcessMessage message) {
+    knowledgeBaseService.processDocumentChunks(message.getDocumentId());
+}
+```
+
+```java
+// KnowledgeBaseServiceImpl.java
+List<String> chunks = textChunker.split(document.getContent());
+List<KbDocumentChunk> savedChunks = new ArrayList<>();
+for (int i = 0; i < chunks.size(); i++) {
+    KbDocumentChunk chunk = new KbDocumentChunk();
+    chunk.setDocumentId(document.getId());
+    chunk.setKnowledgeBaseId(document.getKnowledgeBaseId());
+    chunk.setChunkIndex(i);
+    chunk.setContent(chunks.get(i));
+    chunk.setKeywords(keywordMatcher.extractKeywords(chunks.get(i)));
+    chunkService.save(chunk);
+    savedChunks.add(chunk);
+}
+vectorSearchService.indexChunks(savedChunks, Map.of(document.getId(), document.getTitle()));
+```
+
+可追问回答：
+
+> 当前样例资料来自项目内置样例和公开课程资料链接的整理说明，面试时我会明确说它是“可复现的样例资料库”，不是线上真实校内生产数据。
+
+## 3. RAG 检索：pgvector 可选增强 70 秒
+
+操作：
+
+1. 在学生端切换不同知识库提问。
+2. 展示不同资料命中的来源不同。
+3. 说明无命中时会拒答或提示资料不足。
+
+话术：
+
+> 检索层做了两级设计：优先尝试 pgvector 相似度检索，如果数据库扩展或向量数据不可用，就回退到关键词匹配。这个设计让项目可以在普通本地环境跑起来，也可以在有 PostgreSQL + pgvector 的环境里增强检索效果。
+
+对应代码：
+
+```java
+// RagServiceImpl.java
+vectorSearchService.indexChunks(chunks, titleMap);
+List<MatchedChunkVO> vectorResults = vectorSearchService.search(knowledgeBaseId, question, topK);
+if (!vectorResults.isEmpty()) {
+    return vectorResults;
+}
+return keywordMatcher.topKWithScore(question, chunks, topK, titleMap);
+```
+
+```java
+// HashingEmbeddingService.java
+double[] vector = new double[dimension];
+for (String token : tokenize(text)) {
+    int index = Math.floorMod(hash(token), dimension);
+    vector[index] += 1.0;
+}
+normalize(vector);
+```
+
+边界说明：
+
+> 当前项目使用本地 Hashing Embedding 作为可运行的轻量方案，不包装成 OpenAI 或 DeepSeek embedding。真实生产可以替换为模型 embedding 服务，`PgVectorSearchService` 的调用边界已经预留出来。
+
+## 4. 管理员端：平台治理 70 秒
+
+操作：
 
 1. 使用 `admin / 123456` 登录。
-2. 进入“平台运营看板”。
-3. 展示用户数、知识库数、资料文档数、问答次数。
-4. 展示文档处理任务状态和服务健康。
-5. 展示开放资料来源卡片。
+2. 进入平台运营看板。
+3. 展示用户数、知识库数、文档数、问答数、文档任务状态、服务健康信息。
 
-讲解话术：
+话术：
 
-> 管理员端关注平台治理：资料来源是否合规、文档任务是否失败、服务是否正常、知识库是否需要审核。这让项目从一个功能 Demo 变成有运营闭环的产品。
+> 管理员端体现的是工程化闭环。除了能管理用户和知识库，还能看到文档处理任务状态、服务健康状态和问答统计，这样系统不是“能问答就结束”，而是可运维、可治理。
 
-## 6. 总结
+对应代码：
 
-本轮升级主要提升三点：
+```java
+// AdminController.java
+data.put("userCount", userService.count());
+data.put("knowledgeBaseCount", knowledgeBaseService.count());
+data.put("documentCount", documentService.count());
+data.put("chatCount", chatRecordService.count());
+```
 
-- 页面真实感：学生端 AI 工作台，教师/管理员端教务后台。
-- 资料真实感：引入 MIT OCW、OpenDSA、OpenStax 和智慧高教参考链接。
-- 业务闭环：教师维护资料，学生溯源问答，管理员监管运行。
+```vue
+<!-- DocumentTasks.vue -->
+<el-table :data="tasks">
+  <el-table-column prop="documentName" label="文档" />
+  <el-table-column prop="status" label="状态" />
+  <el-table-column prop="chunkCount" label="片段数" />
+</el-table>
+```
+
+## 5. 收尾 30 秒
+
+话术：
+
+> 这个项目我最想强调三点：第一，RAG 不是只调模型，而是资料治理、检索、Prompt、引用和拒答策略的组合；第二，权限和角色是真实接入 Spring Security/JWT 的；第三，文档处理、缓存、任务监控和测试让它从演示功能变成一个可以讲工程边界的项目。
+
+收尾时不要夸大：
+
+- 不说“已经生产可用”，说“具备生产化改造的骨架”。
+- 不说“真实 embedding 模型”，说“当前是本地 hashing embedding，可替换真实 embedding 服务”。
+- 不说“真实学校数据”，说“可复现样例资料库 + 公开资料来源说明”。

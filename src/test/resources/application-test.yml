@@ -25,5 +25,8 @@ app:
     secret: test-jwt-secret-for-unit-tests-only-32chars
   vector:
     enabled: false
+  embedding:
+    mode: hashing
+    dimension: 128
   rate-limit:
     enabled: false
