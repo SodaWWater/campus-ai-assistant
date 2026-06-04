@@ -164,9 +164,23 @@
 
 **对应代码**：`TextChunker.split()`
 
----
+**当前切片 vs 专业升级方案**
 
-### 第④步：提取关键词（KeywordMatcher）
+现在是规则化方案。但架构已经预留了升级路径：
+
+| | 当前方案 | 专业升级 |
+|---|---|---|
+| 切片方式 | 固定 400 字符 + 标点回退 | 按标题/段落层级切，每段 500 token |
+| Overlap | 无 | 相邻 chunk 重叠 50~100 token，跨片段不丢信息 |
+| 关键词 | 正则 + bigram | TF-IDF / BM25 自动加权 |
+| 检索 | 向量 OR 关键词 | 混合检索：向量 × 权重 + BM25 × 权重 |
+| Rerank | 无 | 粗召回 → 精排模型挑 TopK |
+
+**面试话术**：
+
+> 切片目前用规则化方案，简单可靠。但我设计时预留了升级路径——后面可以加 overlap 防止跨片段丢信息、用 BM25 做关键词加权、引入 rerank 提升精度。Embedding 也抽象成了接口，默认本地跑，配置后切真实模型。
+
+---### 第④步：提取关键词（KeywordMatcher）
 
 **为什么要提取关键词？** 两个用途：
 1. 关键词检索时用于匹配打分
@@ -196,22 +210,39 @@
 
 ---
 
-### 第⑤步：生成向量（Embedding）
+### 第⑤步：生成向量（Embedding）— 最核心的升级
 
-**这是最关键的一步**：把一段文字变成一串数字。
+**这是 RAG 最关键的一步**：把一段文字变成一串数字。
 
-**当前有两种模式**：
+**架构设计：可配置 Embedding 接口**
 
-#### 模式一：本地 Hashing（默认，不需要 API Key）
+我先设计了一个 `EmbeddingClient` 接口（相当于"向量生成器"的抽象标准），然后做了三种实现：
+
+```
+                   ┌─ EmbeddingClient 接口 ─┐
+                   │   embed(文字) → 向量    │
+                   └────────┬───────────────┘
+                            │
+          ┌─────────────────┼─────────────────┐
+          ▼                 ▼                  ▼
+   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+   │ Hashing模式   │  │ OpenAI模式    │  │ Auto模式      │
+   │ 默认/本地     │  │ 真实API      │  │ 智能切换      │
+   └──────────────┘  └──────────────┘  └──────────────┘
+```
+
+**为什么这样设计？** 一句话：**默认能跑，配置后能升级**。面试时不需要 API Key 也能演示；真正部署时一个环境变量就切到真实模型。
+
+#### 模式一：本地 Hashing（默认，零配置）
 
 用 `HashingEmbeddingService`，原理：
 
 ```
 1. 提取文本中的词元（和关键词类似的方法）
 2. 对每个词元做 SHA-256 哈希 → 得到一个数字
-3. 用这个数字对 128 取模 → 确定落在 128 维中的哪个位置
-4. 在那个位置上 +1
-5. 全部词元处理完后，做归一化（让所有数值缩放到 0-1 之间）
+3. 用这个数字对维度数取模 → 确定落在哪个位置
+4. 在那个位置上 +1（词频累计）
+5. 全部词元处理完后，做 L2 归一化
 ```
 
 **举个极简例子（假设只有 5 维）**：
@@ -226,13 +257,83 @@ arraylist → hash → 模5 = 3 → 向量[3] += 1
 结果：[1, 1, 0, 1, 0]
 ```
 
-**这算不算真正的语义向量？** 不算。这是轻量级的哈希映射，目的不是追求最强语义效果，而是**打通工程链路**。真正的语义向量需要用大模型生成（OpenAI 的 text-embedding-3-small 等），我们这个架构已经预留了接口。
+**面试重点**：这不是语义模型，是轻量级哈希映射。目的不是追求最强语义，而是**打通工程链路**——让 chunk → embedding → pgvector → 相似度检索这条线先跑通。接口设计好了，后续换真实模型只需实现一个 `EmbeddingClient`。
 
-#### 模式二：真实 Embedding API（配置后可切换）
+#### 模式二：真实 OpenAI-compatible Embedding（需要 API Key）
 
-配置环境变量后，系统通过 `OpenAiCompatibleEmbeddingClient` 调用 OpenAI 的 `/embeddings` 接口，由大模型生成真正的语义向量。
+用 `OpenAiCompatibleEmbeddingClient`，调用 OpenAI 的 `/embeddings` 接口。
 
-**对应代码**：`HashingEmbeddingService.embed()`, `OpenAiCompatibleEmbeddingClient.embed()`, `EmbeddingClientRouter`
+```powershell
+# 配置环境变量后自动切换
+$env:EMBEDDING_MODE="openai-compatible"
+$env:EMBEDDING_BASE_URL="https://api.openai.com/v1"
+$env:EMBEDDING_API_KEY="your_api_key"
+$env:EMBEDDING_MODEL="text-embedding-3-small"
+$env:EMBEDDING_DIMENSION="1536"   # text-embedding-3-small 默认 1536 维
+```
+
+**和 hashing 有什么区别？**
+
+| | Hashing（本地） | OpenAI Embedding（真实） |
+|---|---|---|
+| 原理 | 哈希函数映射 | 大模型生成的语义向量 |
+| 维度 | 128（可配） | 1536 / 3072（可配） |
+| 语义理解 | 弱，只看词频率 | 强，理解上下文意思 |
+| 需要 API Key？ | 不需要 | 需要 |
+| "苹果"和"水果" | 两个不相关的词 | 能理解它们是相关的 |
+
+说白了：**hashing 看的是"用了哪些词"，真实 embedding 看的是"说的是什么意思"**。
+
+#### 模式三：Auto 自动模式
+
+```powershell
+$env:EMBEDDING_MODE="auto"
+```
+
+逻辑：
+```
+真实 API 配置了吗？→ 是 → 先试真实 API
+                      │
+                      ├─ 成功 → 返回真实向量
+                      └─ 失败 → 自动回退 hashing
+                      
+                   → 否 → 直接用 hashing
+```
+
+**这个设计的意义**：开发环境不设 API Key 也能跑；生产环境设了就用更好的效果；API 临时挂了也不影响系统。
+
+#### 路由决策：EmbeddingClientRouter
+
+`EmbeddingClientRouter` 是总调度器，根据配置的 `app.embedding.mode` 决定走哪条路：
+
+```java
+// 三种模式一句话对应
+mode = "hashing"              → 走本地哈希
+mode = "openai-compatible"    → 走真实 API
+mode = "auto"                 → 优先真实，失败回退哈希
+```
+
+#### pgvector 表里还保存了 Embedding 元数据
+
+写入 pgvector 的不只是向量值，还有三个额外字段：
+
+| 元数据字段 | 存什么 | 为什么存 |
+|-----------|--------|---------|
+| `embedding_provider` | "local" 或 "openai" | 知道是哪个服务生成的 |
+| `embedding_model` | "hashing-embedding" 或 "text-embedding-3-small" | 知道用的哪个模型 |
+| `embedding_dimension` | 128 或 1536 | 知道向量是几维的 |
+
+**为什么存这些？** 当检索时，系统会加上过滤条件：
+
+```sql
+WHERE embedding_provider = 'openai'
+  AND embedding_model = 'text-embedding-3-small'
+  AND embedding_dimension = 1536
+```
+
+这样**不同模型生成的向量不会混在一起**。因为 OpenAI 1536 维向量和 hashing 128 维向量的"空间"完全不同，混在一起比较出来的相似度没有意义。就像不能用中国地图上的距离去比较月球地图上的距离。
+
+**对应代码**：`EmbeddingClient.java`, `EmbeddingVector.java`, `EmbeddingClientRouter.java`, `HashingEmbeddingService.java`, `OpenAiCompatibleEmbeddingClient.java`, `PgVectorSearchService.indexChunks()`
 
 ---
 
@@ -414,9 +515,9 @@ ArrayList 和 LinkedList 怎么选？
 
 ## 面试速记卡片
 
-### 30 秒版本（面试官问"你的项目怎么做 RAG"）
+### 30 秒版本（面试官问"你的 RAG 怎么做的"）
 
-> 教师上传文档后，系统先用 RabbitMQ 异步处理——把文档切成 chunk，提取关键词，再用 embedding 把每个 chunk 转成 128 维向量存到 pgvector。学生提问时，问题也转成向量，在 pgvector 里做相似度搜索找到最相关的 5 个 chunk，拼成 Prompt 发给大模型生成回答，最后把引用来源一起返回。pgvector 不可用时自动回退关键词检索，保证系统不挂。
+> 教师上传文档 → RabbitMQ 异步切片成 chunk → 先本地 hashing 生成 128 维向量存入 pgvector → 学生提问转同维度向量 → pgvector 余弦相似度找 Top5 最相关片段 → 拼 Prompt 发给 LLM → 返回答案 + 引用来源。Embedding 抽象成了接口，默认本地跑保证演示稳定，配置环境变量后切真实 OpenAI embedding。pgvector 不可用时自动回退关键词检索。
 
 ### 关键技术术语速查表
 
@@ -437,17 +538,19 @@ ArrayList 和 LinkedList 怎么选？
 | HNSW | 一种加速向量搜索的索引结构 |
 | DLQ | 死信队列，消息处理失败后的归宿 |
 
-### 面试必背 5 句话
+### 面试必背 6 句话
 
 1. **架构**：MySQL 做主存储，pgvector 做向量索引副本，Redis 做缓存，RabbitMQ 做异步。
 
 2. **检索**：向量优先（pgvector），关键词兜底（KeywordMatcher），保证高可用。
 
-3. **拒答**：知识库无命中时不调用 LLM，直接返回"当前知识库资料不足"，防止幻觉。
+3. **Embedding 设计**：`EmbeddingClient` 抽象接口，支持 hashing/openai-compatible/auto 三种模式。写入 pgvector 时保存 provider/model/dimension 元数据，检索时按元数据过滤，避免不同模型混用。
 
-4. **权限**：Spring Security + JWT，三层控制——路径拦截 + 方法注解 + 业务层 visibility 过滤。
+4. **拒答**：知识库无命中时不调用 LLM，直接返回"当前知识库资料不足"，防止幻觉。
 
-5. **可观测**：Actuator 暴露健康状态和指标，Micrometer 记录检索耗时、生成耗时、LLM 成功率。
+5. **权限**：Spring Security + JWT，三层控制——路径拦截 + SecurityUtils + visibility 过滤 + checkOwnership。
+
+6. **可观测**：Actuator 健康检查 + Micrometer 指标（检索耗时/生成耗时/LLM 成功率）。
 
 ### 如果被追问"你是怎么实现的"
 
