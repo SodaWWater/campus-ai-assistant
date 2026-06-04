@@ -13,6 +13,7 @@ import com.liminghan.campusai.mapper.KnowledgeBaseMapper;
 import com.liminghan.campusai.service.KbDocumentChunkService;
 import com.liminghan.campusai.service.KbDocumentService;
 import com.liminghan.campusai.service.KnowledgeBaseService;
+import com.liminghan.campusai.service.vector.PgVectorSearchService;
 import com.liminghan.campusai.util.KeywordMatcher;
 import com.liminghan.campusai.util.TextChunker;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -23,7 +24,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, KnowledgeBase> implements KnowledgeBaseService {
@@ -34,6 +37,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     private final KeywordMatcher keywordMatcher;
     private final RedisTemplate<String, Object> redisTemplate;
     private final RabbitTemplate rabbitTemplate;
+    private final PgVectorSearchService vectorSearchService;
 
     @Value("${app.cache.knowledge-base-list-ttl-minutes:10}")
     private long knowledgeBaseListTtlMinutes;
@@ -49,13 +53,15 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
                                     TextChunker textChunker,
                                     KeywordMatcher keywordMatcher,
                                     RedisTemplate<String, Object> redisTemplate,
-                                    RabbitTemplate rabbitTemplate) {
+                                    RabbitTemplate rabbitTemplate,
+                                    PgVectorSearchService vectorSearchService) {
         this.documentService = documentService;
         this.chunkService = chunkService;
         this.textChunker = textChunker;
         this.keywordMatcher = keywordMatcher;
         this.redisTemplate = redisTemplate;
         this.rabbitTemplate = rabbitTemplate;
+        this.vectorSearchService = vectorSearchService;
     }
 
     @Override
@@ -108,6 +114,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     @Transactional(rollbackFor = Exception.class)
     public void deleteKnowledgeBase(Long id) {
         getKnowledgeBase(id);
+        vectorSearchService.deleteByKnowledgeBaseId(id);
         documentService.lambdaUpdate().eq(KbDocument::getKnowledgeBaseId, id).remove();
         chunkService.lambdaUpdate().eq(KbDocumentChunk::getKnowledgeBaseId, id).remove();
         removeById(id);
@@ -174,8 +181,10 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
             throw new BusinessException(ErrorCode.NOT_FOUND, "document not found");
         }
 
+        vectorSearchService.deleteByDocumentId(documentId);
         chunkService.lambdaUpdate().eq(KbDocumentChunk::getDocumentId, documentId).remove();
         List<String> chunks = textChunker.split(document.getContent());
+        List<KbDocumentChunk> savedChunks = new ArrayList<>();
         for (int i = 0; i < chunks.size(); i++) {
             KbDocumentChunk chunk = new KbDocumentChunk();
             chunk.setDocumentId(document.getId());
@@ -185,6 +194,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
             chunk.setKeywords(keywordMatcher.extractKeywords(chunks.get(i)));
             chunk.setCreatedAt(LocalDateTime.now());
             chunkService.save(chunk);
+            savedChunks.add(chunk);
         }
 
         // 更新文档状态为 DONE
@@ -196,6 +206,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
 
         // 更新知识库计数
         updateKbCounts(document.getKnowledgeBaseId());
+        vectorSearchService.indexChunks(savedChunks, Map.of(document.getId(), document.getTitle()));
     }
 
     /**
@@ -279,6 +290,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         if (document == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "document not found");
         }
+        vectorSearchService.deleteByDocumentId(documentId);
         chunkService.lambdaUpdate().eq(KbDocumentChunk::getDocumentId, documentId).remove();
         documentService.removeById(documentId);
         updateKbCounts(document.getKnowledgeBaseId());

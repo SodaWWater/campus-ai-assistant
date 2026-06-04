@@ -15,6 +15,16 @@ services:
       - ./scripts/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
       - ./scripts/sample-data.sql:/docker-entrypoint-initdb.d/02-sample-data.sql:ro
 
+  pgvector:
+    image: pgvector/pgvector:pg16
+    container_name: campus-ai-pgvector
+    environment:
+      POSTGRES_DB: campus_ai_vector
+      POSTGRES_USER: campus_ai
+      POSTGRES_PASSWORD: campus_ai
+    ports:
+      - "5433:5432"
+
   redis:
     image: redis:7
     container_name: campus-ai-redis

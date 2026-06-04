@@ -37,6 +37,7 @@
 
 - 后端：Java 21、Spring Boot 3.3、Spring Security 6、JWT、MyBatis-Plus
 - 数据：MySQL 8、Redis 7
+- 向量检索：PostgreSQL + pgvector（可选增强层，主业务库仍为 MySQL）
 - 消息队列：RabbitMQ，支持文档异步处理、重试和死信队列
 - 文档解析：PDFBox、Apache POI
 - AI：`LlmClient` 抽象，支持 Mock、DeepSeek、Spring AI OpenAI-compatible client
@@ -63,6 +64,7 @@ npm run dev
 - 前端：http://localhost:5173
 - Swagger：http://localhost:8081/swagger-ui.html
 - RabbitMQ 管理台：http://localhost:15672
+- pgvector：localhost:5433 / `campus_ai_vector`
 
 ## 初始化样例资料
 
@@ -82,6 +84,15 @@ $env:LLM_MODE="real"
 $env:DEEPSEEK_API_KEY="你的 API Key"
 mvn spring-boot:run
 ```
+
+向量检索默认启用，但它是可选增强层。若 pgvector 未启动，系统会自动回退到关键词检索。关闭向量检索：
+
+```powershell
+$env:VECTOR_SEARCH_ENABLED="false"
+mvn spring-boot:run
+```
+
+当前向量索引使用本地 hashing embedding 打通工程链路，不等同于真实模型 embedding。后续可替换为 OpenAI/DeepSeek embedding 或其他中文 embedding 模型。
 
 资料说明见：
 

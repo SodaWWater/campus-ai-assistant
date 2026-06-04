@@ -15,11 +15,12 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo === Starting Redis + RabbitMQ (MySQL uses local) ===
-docker compose up -d redis rabbitmq
+echo === Starting Redis + RabbitMQ + pgvector (MySQL uses local by default) ===
+docker compose up -d redis rabbitmq pgvector
 
 echo.
 echo === All infrastructure services ready ===
 echo MySQL (local): localhost:3306
+echo pgvector (Docker): localhost:5433 database=campus_ai_vector user=campus_ai
 echo Redis (Docker): localhost:6379
 echo RabbitMQ (Docker): localhost:5572 ^(management: http://localhost:15672^)

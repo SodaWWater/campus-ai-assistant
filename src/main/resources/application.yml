@@ -51,6 +51,12 @@ app:
     knowledge-base-list-ttl-minutes: 1
     faq-ttl-minutes: 5
     context-ttl-hours: 1
+  vector:
+    enabled: ${VECTOR_SEARCH_ENABLED:true}
+    dimension: ${VECTOR_DIMENSION:128}
+    jdbc-url: ${VECTOR_DB_URL:jdbc:postgresql://localhost:5433/campus_ai_vector}
+    username: ${VECTOR_DB_USERNAME:campus_ai}
+    password: ${VECTOR_DB_PASSWORD:campus_ai}
   mq:
     document-exchange: campus.ai.document.exchange
     document-routing-key: document.process

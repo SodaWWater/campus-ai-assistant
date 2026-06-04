@@ -49,7 +49,10 @@
 
 仍未实现：
 
-- 向量检索。
-- embedding 生成。
+- 真实模型 embedding 生成。
 - rerank 模型。
 - 引用编号写入回答正文。
+
+## Phase 2-B 实施说明
+
+PostgreSQL + pgvector 方案见 `docs/phase-2-pgvector-design.md`。当前实现目标是打通可选向量索引链路，embedding 采用本地 hashing embedding，后续可替换为真实 embedding 模型。
