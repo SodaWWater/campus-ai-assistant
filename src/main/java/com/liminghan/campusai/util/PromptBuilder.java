@@ -65,13 +65,13 @@ public class PromptBuilder {
      */
     public String buildReferenceOnlyPrompt(String question, String knowledgeBaseName, String conversationHistory) {
         StringBuilder sb = new StringBuilder();
-        sb.append("你是校园学习助手。用户在「").append(knowledgeBaseName).append("」知识库中提问，");
-        sb.append("但当前知识库没有找到直接相关的资料。\n\n");
-        sb.append("请基于你的知识提供一个参考答案，但必须遵守以下规则：\n");
-        sb.append("1. 回答开头必须标注：[⚠ 以下回答未基于课程资料，仅供参考]\n");
-        sb.append("2. 尽量给出有用的信息，但不要假装引用了课程资料。\n");
-        sb.append("3. 回答要适合本科学生理解，结构清晰。\n");
-        sb.append("4. 建议学生向老师确认或补充上传相关资料。\n\n");
+        sb.append("你是校园学习助手。用户当前在「").append(knowledgeBaseName).append("」知识库中提问。\n");
+        sb.append("注意：用户选择的知识库不涵盖此问题，你需要用自己的通用知识来回答。\n\n");
+        sb.append("要求：\n");
+        sb.append("1. 你的回答第一行必须是：[⚠ 以下回答未基于课程资料，仅供参考]\n");
+        sb.append("2. 然后直接给出你的回答，不要说你无法回答、资料不足或知识库范围有限\n");
+        sb.append("3. 回答要适合本科学生理解，结构清晰，有实质内容\n");
+        sb.append("4. 结尾处提醒学生：如需课程资料支撑的回答，请切换到相关课程知识库\n\n");
 
         if (conversationHistory != null && !conversationHistory.isBlank()) {
             sb.append("【历史对话】\n");
