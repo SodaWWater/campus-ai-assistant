@@ -6,15 +6,14 @@ import com.liminghan.campusai.common.Result;
 import com.liminghan.campusai.dto.ChatAskRequest;
 import com.liminghan.campusai.entity.ChatRecord;
 import com.liminghan.campusai.entity.Conversation;
+import com.liminghan.campusai.security.SecurityUtils;
 import com.liminghan.campusai.service.ChatRecordService;
 import com.liminghan.campusai.service.ChatService;
 import com.liminghan.campusai.service.ConversationService;
 import com.liminghan.campusai.vo.ChatResponseVO;
-import io.jsonwebtoken.Claims;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -61,14 +60,9 @@ public class ChatController {
     }
 
     private void populateUserFromJwt(ChatAskRequest request) {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getDetails() instanceof Claims claims) {
-            Long userId = claims.get("userId", Long.class);
-            if (userId != null) request.setUserId(userId);
-            request.setUsername(claims.getSubject());
-        } else {
-            request.setUserId(1L);
-        }
+        Long userId = SecurityUtils.getCurrentUserId();
+        request.setUserId(userId);
+        request.setUsername(SecurityUtils.getCurrentUsername());
     }
 
     @Operation(summary = "查询当前用户的全部问答历史（跨对话）")
@@ -83,11 +77,6 @@ public class ChatController {
     }
 
     private Long getCurrentUserId() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getDetails() instanceof Claims claims) {
-            Long userId = claims.get("userId", Long.class);
-            return userId != null ? userId : 1L;
-        }
-        return 1L;
+        return SecurityUtils.getCurrentUserId();
     }
 }

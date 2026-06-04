@@ -1,0 +1,23 @@
+# Development profile - convenient defaults for local development
+server:
+  port: ${SERVER_PORT:8081}
+
+spring:
+  datasource:
+    url: ${MYSQL_URL:jdbc:mysql://localhost:3306/campus_ai?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+
+llm:
+  mode: ${LLM_MODE:mock}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:campus-ai-assistant-demo-secret-key-change-me-2026}
+
+logging:
+  level:
+    com.liminghan.campusai: DEBUG

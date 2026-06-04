@@ -17,8 +17,14 @@ public class JwtUtil {
     private final long expirationMs;
 
     public JwtUtil(
-            @Value("${app.jwt.secret:campus-ai-assistant-secret-key-2025}") String secret,
+            @Value("${app.jwt.secret:}") String secret,
             @Value("${app.jwt.expiration-ms:86400000}") long expirationMs) {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException(
+                    "JWT_SECRET 环境变量未设置。请设置 JWT_SECRET 环境变量后重新启动。\n"
+                            + "生成密钥示例: openssl rand -base64 32\n"
+                            + "或在 IDEA Run Configuration 中添加 JWT_SECRET=your-secret-key");
+        }
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.expirationMs = expirationMs;
     }

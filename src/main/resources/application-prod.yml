@@ -1,0 +1,21 @@
+# Production profile - all sensitive values must come from environment
+server:
+  port: ${SERVER_PORT:8080}
+
+logging:
+  level:
+    com.liminghan.campusai: INFO
+    org.springframework.security: WARN
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+app:
+  cache:
+    knowledge-base-list-ttl-minutes: 10
+    faq-ttl-minutes: 30
+  rate-limit:
+    enabled: true

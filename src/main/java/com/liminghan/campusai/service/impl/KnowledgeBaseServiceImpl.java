@@ -10,6 +10,8 @@ import com.liminghan.campusai.entity.KbDocument;
 import com.liminghan.campusai.entity.KbDocumentChunk;
 import com.liminghan.campusai.entity.KnowledgeBase;
 import com.liminghan.campusai.mapper.KnowledgeBaseMapper;
+import com.liminghan.campusai.metrics.RagMetrics;
+import com.liminghan.campusai.security.SecurityUtils;
 import com.liminghan.campusai.service.KbDocumentChunkService;
 import com.liminghan.campusai.service.KbDocumentService;
 import com.liminghan.campusai.service.KnowledgeBaseService;
@@ -38,6 +40,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     private final RedisTemplate<String, Object> redisTemplate;
     private final RabbitTemplate rabbitTemplate;
     private final PgVectorSearchService vectorSearchService;
+    private final RagMetrics ragMetrics;
 
     @Value("${app.cache.knowledge-base-list-ttl-minutes:10}")
     private long knowledgeBaseListTtlMinutes;
@@ -54,7 +57,8 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
                                     KeywordMatcher keywordMatcher,
                                     RedisTemplate<String, Object> redisTemplate,
                                     RabbitTemplate rabbitTemplate,
-                                    PgVectorSearchService vectorSearchService) {
+                                    PgVectorSearchService vectorSearchService,
+                                    RagMetrics ragMetrics) {
         this.documentService = documentService;
         this.chunkService = chunkService;
         this.textChunker = textChunker;
@@ -62,6 +66,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         this.redisTemplate = redisTemplate;
         this.rabbitTemplate = rabbitTemplate;
         this.vectorSearchService = vectorSearchService;
+        this.ragMetrics = ragMetrics;
     }
 
     @Override
@@ -70,8 +75,8 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         kb.setName(request.getName());
         kb.setDescription(request.getDescription());
         kb.setVisibility(request.getVisibility() != null ? request.getVisibility() : "PUBLIC");
-        kb.setOwnerId(0L); // TODO: Phase 5 — 从 SecurityContext 获取当前用户
-        kb.setOwnerName("system");
+        kb.setOwnerId(SecurityUtils.getCurrentUserId());
+        kb.setOwnerName(SecurityUtils.getCurrentUsername());
         kb.setDocumentCount(0);
         kb.setChunkCount(0);
         kb.setCreatedAt(LocalDateTime.now());
@@ -84,16 +89,43 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     @Override
     @SuppressWarnings("unchecked")
     public List<KnowledgeBase> listKnowledgeBases() {
-        String cacheKey = "kb:list";
+        Long currentUserId;
+        try {
+            currentUserId = SecurityUtils.getCurrentUserId();
+        } catch (BusinessException e) {
+            // Unauthenticated users see only PUBLIC knowledge bases
+            return lambdaQuery()
+                    .eq(KnowledgeBase::getVisibility, "PUBLIC")
+                    .orderByDesc(KnowledgeBase::getCreatedAt)
+                    .list();
+        }
+
+        boolean isAdmin = SecurityUtils.isCurrentUserAdmin();
+        String cacheKey = isAdmin ? "kb:list:admin" : "kb:list:user:" + currentUserId;
+
         try {
             Object cached = redisTemplate.opsForValue().get(cacheKey);
             if (cached instanceof List<?> list) {
                 return (List<KnowledgeBase>) list;
             }
         } catch (Exception ignored) {
-            // Redis is an optimization. Fall back to MySQL when unavailable.
         }
-        List<KnowledgeBase> list = lambdaQuery().orderByDesc(KnowledgeBase::getCreatedAt).list();
+
+        List<KnowledgeBase> list;
+        if (isAdmin) {
+            list = lambdaQuery().orderByDesc(KnowledgeBase::getCreatedAt).list();
+        } else {
+            list = lambdaQuery()
+                    .and(wrapper -> wrapper
+                            .eq(KnowledgeBase::getVisibility, "PUBLIC")
+                            .or()
+                            .eq(KnowledgeBase::getVisibility, "COURSE_ONLY")
+                            .or()
+                            .eq(KnowledgeBase::getOwnerId, currentUserId))
+                    .orderByDesc(KnowledgeBase::getCreatedAt)
+                    .list();
+        }
+
         try {
             redisTemplate.opsForValue().set(cacheKey, list, Duration.ofMinutes(knowledgeBaseListTtlMinutes));
         } catch (Exception ignored) {
@@ -113,7 +145,8 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteKnowledgeBase(Long id) {
-        getKnowledgeBase(id);
+        KnowledgeBase kb = getKnowledgeBase(id);
+        checkKbOwnership(kb);
         vectorSearchService.deleteByKnowledgeBaseId(id);
         documentService.lambdaUpdate().eq(KbDocument::getKnowledgeBaseId, id).remove();
         chunkService.lambdaUpdate().eq(KbDocumentChunk::getKnowledgeBaseId, id).remove();
@@ -124,6 +157,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long addDocument(Long knowledgeBaseId, DocumentCreateRequest request) {
+        checkKbOwnership(getKnowledgeBase(knowledgeBaseId));
         Long documentId = createDocumentRecord(knowledgeBaseId, request.getTitle(),
                 request.getContent(), "manual.txt", "txt", (long) request.getContent().length());
         processDocumentChunks(documentId);
@@ -133,6 +167,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long uploadDocumentAsync(Long knowledgeBaseId, String fileName, String fileType, Long fileSize, String content) {
+        checkKbOwnership(getKnowledgeBase(knowledgeBaseId));
         String title = fileName.lastIndexOf('.') > 0 ? fileName.substring(0, fileName.lastIndexOf('.')) : fileName;
         Long documentId = createDocumentRecord(knowledgeBaseId, title, content, fileName, fileType, fileSize);
 
@@ -207,6 +242,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         // 更新知识库计数
         updateKbCounts(document.getKnowledgeBaseId());
         vectorSearchService.indexChunks(savedChunks, Map.of(document.getId(), document.getTitle()));
+        ragMetrics.recordDocumentProcessed();
     }
 
     /**
@@ -220,6 +256,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
                 document.setErrorMessage(errorMessage);
                 document.setUpdatedAt(LocalDateTime.now());
                 documentService.updateById(document);
+                ragMetrics.recordDocumentFailed();
             }
         } catch (Exception ignored) {
         }
@@ -262,6 +299,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         if (document == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "document not found");
         }
+        checkKbOwnership(getKnowledgeBase(document.getKnowledgeBaseId()));
         document.setStatus("PROCESSING");
         document.setErrorMessage(null);
         document.setUpdatedAt(LocalDateTime.now());
@@ -290,6 +328,7 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         if (document == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "document not found");
         }
+        checkKbOwnership(getKnowledgeBase(document.getKnowledgeBaseId()));
         vectorSearchService.deleteByDocumentId(documentId);
         chunkService.lambdaUpdate().eq(KbDocumentChunk::getDocumentId, documentId).remove();
         documentService.removeById(documentId);
@@ -310,9 +349,22 @@ public class KnowledgeBaseServiceImpl extends ServiceImpl<KnowledgeBaseMapper, K
         evictKnowledgeBaseCache();
     }
 
+    /**
+     * Throws FORBIDDEN if the current user is neither the KB owner nor an admin.
+     */
+    private void checkKbOwnership(KnowledgeBase kb) {
+        if (SecurityUtils.isCurrentUserAdmin()) {
+            return;
+        }
+        if (!kb.getOwnerId().equals(SecurityUtils.getCurrentUserId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN, "只能操作自己的知识库");
+        }
+    }
+
     private void evictKnowledgeBaseCache() {
         try {
             redisTemplate.delete("kb:list");
+            redisTemplate.delete("kb:list:admin");
         } catch (Exception ignored) {
         }
     }

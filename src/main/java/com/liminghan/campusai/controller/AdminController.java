@@ -7,11 +7,10 @@ import com.liminghan.campusai.entity.KbDocument;
 import com.liminghan.campusai.entity.KnowledgeBase;
 import com.liminghan.campusai.entity.Student;
 import com.liminghan.campusai.entity.SysUser;
+import com.liminghan.campusai.security.SecurityUtils;
 import com.liminghan.campusai.service.*;
-import io.jsonwebtoken.Claims;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
@@ -136,7 +135,7 @@ public class AdminController {
     @Operation(summary = "删除用户（不能删自己）")
     @DeleteMapping("/users/{id}")
     public Result<String> deleteUser(@PathVariable Long id) {
-        Long self = getCurrentUserId();
+        Long self = SecurityUtils.getCurrentUserId();
         if (self.equals(id)) throw new BusinessException(ErrorCode.PARAM_ERROR, "不能删除自己");
         SysUser user = sysUserService.getById(id);
         if (user == null) throw new BusinessException(ErrorCode.NOT_FOUND, "用户不存在");
@@ -228,12 +227,4 @@ public class AdminController {
         studentService.save(s);
     }
 
-    private Long getCurrentUserId() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getDetails() instanceof Claims claims) {
-            Long userId = claims.get("userId", Long.class);
-            return userId != null ? userId : 3L;
-        }
-        return 3L;
-    }
 }

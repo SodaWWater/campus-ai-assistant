@@ -2,13 +2,12 @@ package com.liminghan.campusai.controller;
 
 import com.liminghan.campusai.common.Result;
 import com.liminghan.campusai.entity.*;
+import com.liminghan.campusai.security.SecurityUtils;
 import com.liminghan.campusai.service.*;
 import com.liminghan.campusai.vo.CourseAverageVO;
 import com.liminghan.campusai.vo.StudentScoreVO;
-import io.jsonwebtoken.Claims;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -62,7 +61,7 @@ public class StudentController {
     @Operation(summary = "当前登录学生的学业成绩（自动识别学号）")
     @GetMapping("/academic")
     public Result<Map<String, Object>> academic() {
-        Long userId = getCurrentUserId();
+        Long userId = SecurityUtils.getCurrentUserId();
 
         // 通过 user_id 关联查找当前登录学生
         Student student = studentService.lambdaQuery()
@@ -119,12 +118,4 @@ public class StudentController {
         return Result.success(data);
     }
 
-    private Long getCurrentUserId() {
-        var auth = SecurityContextHolder.getContext().getAuthentication();
-        if (auth != null && auth.getDetails() instanceof Claims claims) {
-            Long userId = claims.get("userId", Long.class);
-            return userId != null ? userId : 1L;
-        }
-        return 1L;
-    }
 }

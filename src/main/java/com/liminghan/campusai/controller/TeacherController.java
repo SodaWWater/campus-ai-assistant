@@ -4,6 +4,7 @@ import com.liminghan.campusai.common.Result;
 import com.liminghan.campusai.entity.ChatRecord;
 import com.liminghan.campusai.entity.KbDocument;
 import com.liminghan.campusai.entity.KnowledgeBase;
+import com.liminghan.campusai.security.SecurityUtils;
 import com.liminghan.campusai.service.ChatRecordService;
 import com.liminghan.campusai.service.KbDocumentService;
 import com.liminghan.campusai.service.KnowledgeBaseService;
@@ -39,7 +40,10 @@ public class TeacherController {
     @Operation(summary = "教师工作台数据")
     @GetMapping("/dashboard")
     public Result<Map<String, Object>> dashboard() {
-        List<KnowledgeBase> kbs = knowledgeBaseService.listKnowledgeBases();
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        List<KnowledgeBase> kbs = knowledgeBaseService.listKnowledgeBases().stream()
+                .filter(kb -> kb.getOwnerId().equals(currentUserId))
+                .toList();
 
         int docCount = 0;
         int processingCount = 0;
@@ -63,7 +67,11 @@ public class TeacherController {
     @Operation(summary = "教师自己的知识库")
     @GetMapping("/knowledge-bases")
     public Result<List<KnowledgeBase>> knowledgeBases() {
-        return Result.success(knowledgeBaseService.listKnowledgeBases());
+        Long currentUserId = SecurityUtils.getCurrentUserId();
+        List<KnowledgeBase> ownKbs = knowledgeBaseService.listKnowledgeBases().stream()
+                .filter(kb -> kb.getOwnerId().equals(currentUserId))
+                .toList();
+        return Result.success(ownKbs);
     }
 
     @Operation(summary = "学生问题分析")

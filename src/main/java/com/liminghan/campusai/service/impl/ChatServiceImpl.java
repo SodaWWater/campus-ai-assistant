@@ -4,6 +4,7 @@ import com.liminghan.campusai.dto.ChatAskRequest;
 import com.liminghan.campusai.entity.ChatRecord;
 import com.liminghan.campusai.entity.Conversation;
 import com.liminghan.campusai.entity.KbDocumentChunk;
+import com.liminghan.campusai.metrics.RagMetrics;
 import com.liminghan.campusai.service.*;
 import com.liminghan.campusai.util.PromptBuilder;
 import com.liminghan.campusai.vo.ChatResponseVO;
@@ -37,6 +38,7 @@ public class ChatServiceImpl implements ChatService {
     private final DeepSeekLlmClient deepSeekLlmClient;
     private final SpringAiChatClientLlmClient springAiChatClientLlmClient;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final RagMetrics ragMetrics;
 
     @Value("${llm.mode:mock}")
     private String llmMode;
@@ -53,7 +55,8 @@ public class ChatServiceImpl implements ChatService {
                            MockLlmClient mockLlmClient,
                            DeepSeekLlmClient deepSeekLlmClient,
                            SpringAiChatClientLlmClient springAiChatClientLlmClient,
-                           RedisTemplate<String, Object> redisTemplate) {
+                           RedisTemplate<String, Object> redisTemplate,
+                           RagMetrics ragMetrics) {
         this.questionRouter = questionRouter;
         this.ragService = ragService;
         this.academicService = academicService;
@@ -64,6 +67,7 @@ public class ChatServiceImpl implements ChatService {
         this.deepSeekLlmClient = deepSeekLlmClient;
         this.springAiChatClientLlmClient = springAiChatClientLlmClient;
         this.redisTemplate = redisTemplate;
+        this.ragMetrics = ragMetrics;
     }
 
     @Override
@@ -99,6 +103,7 @@ public class ChatServiceImpl implements ChatService {
                     log.warn("RAG retrieval failed: {}", e.getMessage());
                 }
                 retrievalTimeMs = System.currentTimeMillis() - retrievalStart;
+                ragMetrics.recordRetrievalTime(retrievalTimeMs);
             }
 
             String prompt;
@@ -108,13 +113,27 @@ public class ChatServiceImpl implements ChatService {
             } else if (!rawChunks.isEmpty()) {
                 prompt = promptBuilder.buildRagPrompt(request.getQuestion(), rawChunks, history);
                 long generationStart = System.currentTimeMillis();
-                answer = chooseClient().generate(prompt);
+                try {
+                    answer = chooseClient().generate(prompt);
+                    ragMetrics.recordLlmSuccess();
+                } catch (Exception e) {
+                    ragMetrics.recordLlmFailure();
+                    throw e;
+                }
                 generationTimeMs = System.currentTimeMillis() - generationStart;
+                ragMetrics.recordGenerationTime(generationTimeMs);
             } else {
                 prompt = promptBuilder.buildGeneralPrompt(request.getQuestion(), history);
                 long generationStart = System.currentTimeMillis();
-                answer = chooseClient().generate(prompt);
+                try {
+                    answer = chooseClient().generate(prompt);
+                    ragMetrics.recordLlmSuccess();
+                } catch (Exception e) {
+                    ragMetrics.recordLlmFailure();
+                    throw e;
+                }
                 generationTimeMs = System.currentTimeMillis() - generationStart;
+                ragMetrics.recordGenerationTime(generationTimeMs);
             }
 
             promptPreview = prompt.length() > 500 ? prompt.substring(0, 500) + "..." : prompt;
