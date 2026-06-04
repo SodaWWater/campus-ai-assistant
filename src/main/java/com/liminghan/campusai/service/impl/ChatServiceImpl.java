@@ -39,6 +39,7 @@ public class ChatServiceImpl implements ChatService {
     private final SpringAiChatClientLlmClient springAiChatClientLlmClient;
     private final RedisTemplate<String, Object> redisTemplate;
     private final RagMetrics ragMetrics;
+    private final KnowledgeBaseService knowledgeBaseService;
 
     @Value("${llm.mode:mock}")
     private String llmMode;
@@ -56,7 +57,8 @@ public class ChatServiceImpl implements ChatService {
                            DeepSeekLlmClient deepSeekLlmClient,
                            SpringAiChatClientLlmClient springAiChatClientLlmClient,
                            RedisTemplate<String, Object> redisTemplate,
-                           RagMetrics ragMetrics) {
+                           RagMetrics ragMetrics,
+                           KnowledgeBaseService knowledgeBaseService) {
         this.questionRouter = questionRouter;
         this.ragService = ragService;
         this.academicService = academicService;
@@ -68,6 +70,7 @@ public class ChatServiceImpl implements ChatService {
         this.springAiChatClientLlmClient = springAiChatClientLlmClient;
         this.redisTemplate = redisTemplate;
         this.ragMetrics = ragMetrics;
+        this.knowledgeBaseService = knowledgeBaseService;
     }
 
     @Override
@@ -108,8 +111,18 @@ public class ChatServiceImpl implements ChatService {
 
             String prompt;
             if (hasSelectedKnowledgeBase && rawChunks.isEmpty()) {
-                prompt = "知识库命中不足，未调用 LLM。问题：" + request.getQuestion();
-                answer = buildInsufficientKnowledgeAnswer(request.getQuestion());
+                String kbName = getKnowledgeBaseName(request.getKnowledgeBaseId());
+                prompt = promptBuilder.buildReferenceOnlyPrompt(request.getQuestion(), kbName, history);
+                long generationStart = System.currentTimeMillis();
+                try {
+                    answer = chooseClient().generate(prompt);
+                    ragMetrics.recordLlmSuccess();
+                } catch (Exception e) {
+                    ragMetrics.recordLlmFailure();
+                    throw e;
+                }
+                generationTimeMs = System.currentTimeMillis() - generationStart;
+                ragMetrics.recordGenerationTime(generationTimeMs);
             } else if (!rawChunks.isEmpty()) {
                 prompt = promptBuilder.buildRagPrompt(request.getQuestion(), rawChunks, history);
                 long generationStart = System.currentTimeMillis();
@@ -204,13 +217,16 @@ public class ChatServiceImpl implements ChatService {
         return mockLlmClient;
     }
 
-    private String buildInsufficientKnowledgeAnswer(String question) {
-        return "当前知识库资料不足，暂时无法基于可信课程资料回答这个问题。\n\n"
-                + "你可以尝试：\n"
-                + "1. 切换到更相关的课程知识库；\n"
-                + "2. 使用更具体的关键词重新提问；\n"
-                + "3. 请教师补充相关讲义、实验指导或复习资料。\n\n"
-                + "原问题：" + question;
+    private String getKnowledgeBaseName(Long kbId) {
+        if (kbId == null || kbId <= 0) {
+            return "未知知识库";
+        }
+        try {
+            var kb = knowledgeBaseService.getKnowledgeBase(kbId);
+            return kb.getName();
+        } catch (Exception e) {
+            return "未知知识库";
+        }
     }
 
     private ChatRecord saveChatRecord(ChatAskRequest request, Long conversationId,
