@@ -114,6 +114,7 @@
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Delete } from '@element-plus/icons-vue'
 import { getKnowledgeBases } from '../../api/assistant'
 import { askQuestion } from '../../api/chat'
 import { createConversation, deleteConversation, getMessages, listConversations } from '../../api/conversation'
