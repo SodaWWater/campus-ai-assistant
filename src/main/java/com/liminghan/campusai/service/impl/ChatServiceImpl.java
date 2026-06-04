@@ -113,7 +113,11 @@ public class ChatServiceImpl implements ChatService {
             }
 
             String prompt;
-            if (hasSelectedKnowledgeBase && rawChunks.isEmpty()) {
+            // Check if we have meaningfully relevant chunks (best score > 10)
+            boolean hasRelevantChunks = !matchedChunks.isEmpty()
+                    && matchedChunks.get(0).getScore() > 10;
+
+            if (hasSelectedKnowledgeBase && !hasRelevantChunks) {
                 String kbName = getKnowledgeBaseName(request.getKnowledgeBaseId());
                 prompt = promptBuilder.buildReferenceOnlyPrompt(request.getQuestion(), kbName, history);
                 long generationStart = System.currentTimeMillis();
@@ -126,7 +130,7 @@ public class ChatServiceImpl implements ChatService {
                 }
                 generationTimeMs = System.currentTimeMillis() - generationStart;
                 ragMetrics.recordGenerationTime(generationTimeMs);
-            } else if (!rawChunks.isEmpty()) {
+            } else if (hasRelevantChunks) {
                 prompt = promptBuilder.buildRagPrompt(request.getQuestion(), rawChunks, history);
                 long generationStart = System.currentTimeMillis();
                 try {
