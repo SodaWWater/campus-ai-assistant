@@ -1,6 +1,6 @@
 # 架构说明
 
-本文档用于面试时讲清楚项目架构。重点不是罗列技术栈，而是说明每一层解决什么问题，以及关键代码在哪里。
+本文档说明项目架构。重点不是罗列技术栈，而是说明每一层解决什么问题，以及关键代码在哪里。
 
 ## 总体架构
 
@@ -39,7 +39,7 @@ flowchart LR
 - `frontend/src/views/AdminDashboard.vue`
 - `frontend/src/views/DocumentTasks.vue`
 
-面试讲法：
+设计说明：
 
 > 前端不是一个通用聊天框，而是按角色拆成工作台。学生关心答案和引用，教师关心资料维护，管理员关心平台治理。
 
@@ -107,7 +107,7 @@ if (containsAny(safeQuestion, RAG_KEYWORDS)) {
 return QuestionType.GENERAL_CHAT;
 ```
 
-面试讲法：
+设计说明：
 
 > 我把不确定生成和确定性业务查询分开。成绩、课程这类数据直接查数据库；资料解释类问题进入 RAG；兜底闲聊才走普通模型回复。
 

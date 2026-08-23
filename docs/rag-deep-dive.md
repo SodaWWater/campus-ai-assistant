@@ -1,6 +1,6 @@
 # RAG 文档处理与检索深度讲解
 
-本文档专门用于回答面试官对 RAG 核心链路的深挖问题：文档怎么处理、chunk 怎么切、关键词怎么提取、pgvector 索引怎么建、检索时怎么回退。
+本文档说明 RAG 核心链路：文档处理、chunk 切分、关键词提取、pgvector 索引和检索回退。
 
 说明：以下代码块是关键逻辑摘录，省略了部分导入、构造器和异常处理。讲解时以源码文件为准，不把摘录说成完整源码。
 
@@ -93,7 +93,7 @@ public void processDocumentChunks(Long documentId) {
 }
 ```
 
-### 面试追问
+### 设计问答
 
 **为什么上传后不直接同步处理？**
 
@@ -162,11 +162,11 @@ private int findLastPunctuation(String text, int start, int end) {
 }
 ```
 
-注：源码中 `findLastPunctuation` 直接判断若干中英文标点字符，包括英文 `. ! ?`。讲面试时可以说“优先按句末或分隔标点切分”，不要扩展成复杂 NLP 分句器。
+注：源码中 `findLastPunctuation` 直接判断若干中英文标点字符，包括英文 `. ! ?`。准确边界是“优先按句末或分隔标点切分”，不是复杂 NLP 分句器。
 
 ### 为什么这样设计
 
-这个项目是简历项目，优先保证规则简单、可解释、可测试、运行稳定。400 字符能让 chunk 足够短，便于 Prompt 引用；300 最小阈值避免为了一个很早的标点切出过短片段；标点回退让内容更接近完整语义单元。
+当前实现优先保证规则简单、可解释、可测试和运行稳定。400 字符能让 chunk 足够短，便于 Prompt 引用；300 最小阈值避免为了一个很早的标点切出过短片段；标点回退让内容更接近完整语义单元。
 
 ### 局限与可升级点
 
@@ -308,7 +308,7 @@ public List<MatchedChunkVO> topKWithScore(String question, List<KbDocumentChunk>
 }
 ```
 
-### 面试边界
+### 实现边界
 
 这套关键词评分是轻量检索，不是 BM25，也不是 Elasticsearch。它的价值是本地可运行、逻辑可解释，并且作为 pgvector 不可用时的稳定回退。
 
@@ -381,7 +381,7 @@ app:
     jdbc-url: ${VECTOR_DB_URL:jdbc:postgresql://localhost:5433/campus_ai_vector}
 ```
 
-### 面试边界
+### 实现边界
 
 一定要明确说：这不是大模型 embedding，不要包装成语义向量模型。它是一个轻量 hashing embedding，用于验证向量索引链路，后续可替换为真实中文 embedding。
 
@@ -482,7 +482,7 @@ embeddingClient.embed(chunk.getContent() + " " + nullToEmpty(chunk.getKeywords()
 
 ### 关于索引类型的边界
 
-当前代码会创建 `knowledge_base_id` 普通索引，并在 `VECTOR_HNSW_ENABLED=true` 时尝试创建 HNSW 向量近似索引。检索排序使用的是 pgvector 的距离操作符 `<=>`。所以面试时要说：
+当前代码会创建 `knowledge_base_id` 普通索引，并在 `VECTOR_HNSW_ENABLED=true` 时尝试创建 HNSW 向量近似索引。检索排序使用的是 pgvector 的距离操作符 `<=>`。准确边界是：
 
 > 项目已经打通 pgvector 向量表和相似度排序链路，并提供可选 HNSW 索引开关。如果本地 pgvector 版本不支持 HNSW，会记录 warn，不影响关键词回退。
 
@@ -544,7 +544,7 @@ private void disableForCurrentRun(String action, Exception e) {
 }
 ```
 
-### 面试讲法
+### 实现说明
 
 > 检索不是单点依赖 pgvector。pgvector 启用时优先走向量检索；如果未配置、连接失败、建表失败或搜索异常，`PgVectorSearchService` 会把当前运行周期标记为不可用，RAG 回退到关键词检索，保证系统仍能回答。
 
@@ -552,7 +552,7 @@ private void disableForCurrentRun(String action, Exception e) {
 
 可以按这段 60 秒话术背：
 
-> 文档上传后，我先在 MySQL 保存文档记录并标记为 PROCESSING，然后投递 RabbitMQ。消费者根据 documentId 重新处理文档：先删除旧 chunk 和旧向量索引，再用 `TextChunker` 按 400 字符窗口切片，切片时会尽量在 300 字符之后的标点处断开，避免破坏句子。每个 chunk 保存到 `kb_document_chunk`，同时用 `KeywordMatcher` 提取前 30 个关键词，规则是正则词元、停用词过滤和中文 bigram。处理完成后把 chunk 写入 pgvector，embedding 用本地 hashing embedding，默认 128 维，把正文和关键词一起映射成向量。查询时优先按 pgvector 的 `<=>` 距离排序取 TopK，如果 pgvector 不可用或没有结果，就回退关键词评分。这个设计保证了面试演示稳定，同时也保留了替换真实 embedding 和 ANN 索引的升级空间。
+> 文档上传后，系统先在 MySQL 保存文档记录并标记为 PROCESSING，然后投递 RabbitMQ。消费者根据 documentId 重新处理文档：先删除旧 chunk 和旧向量索引，再用 `TextChunker` 按 400 字符窗口切片，切片时会尽量在 300 字符之后的标点处断开，避免破坏句子。每个 chunk 保存到 `kb_document_chunk`，同时用 `KeywordMatcher` 提取前 30 个关键词，规则是正则词元、停用词过滤和中文 bigram。处理完成后把 chunk 写入 pgvector，embedding 使用本地 hashing embedding，默认 128 维，把正文和关键词一起映射成向量。查询时优先按 pgvector 的 `<=>` 距离排序取 TopK，如果 pgvector 不可用或没有结果，就回退关键词评分。这一实现保证本地链路可复现，并保留替换真实 embedding 和 ANN 索引的扩展位置。
 
 ## 9. 高频追问
 
@@ -580,7 +580,7 @@ USING hnsw (embedding vector_cosine_ops);
 
 如果 pgvector 版本不支持 HNSW，系统只记录 warn，仍然可以用 `<=>` 排序或回退关键词检索。
 
-**如果面试官问真实 embedding 怎么接？**
+**如何接入真实 embedding？**
 
 回答：
 

@@ -1,4 +1,4 @@
-# Campus Knowledge Hub 面试讲解模板
+# Campus Knowledge Hub 项目概览
 
 ## 30 秒项目简介
 
@@ -46,7 +46,7 @@ Campus Knowledge Hub 是一个面向高校课程资料管理与智能答疑场�
 
 ### 5. 工程兜底
 
-如果 RabbitMQ 不可用，上传流程会降级同步处理；如果 pgvector 不可用，RAG 会回退关键词检索；如果 Redis 不可用，会回退 MySQL 查询。这样本地演示和面试现场更稳定。
+如果 RabbitMQ 不可用，上传流程会降级同步处理；如果 pgvector 不可用，RAG 会回退关键词检索；如果 Redis 不可用，会回退 MySQL 查询。这样可以保持本地运行和演示流程稳定。
 
 ### 6. 权限与治理
 

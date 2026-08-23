@@ -1,9 +1,9 @@
 # 项目流程与关键代码讲解
 
-本文档用于面试背诵。每个流程都按“怎么讲 -> 关键代码 -> 面试官可能追问”组织。
-说明：以下代码块是对应文件中的关键逻辑摘录，为了便于讲解省略了部分导入、变量声明和异常处理；面试时按流程讲，不把摘录说成完整源码。
+本文档按核心流程组织关键代码和设计问答，便于从入口定位到具体实现。
+说明：以下代码块是对应文件中的关键逻辑摘录，为了便于讲解省略了部分导入、变量声明和异常处理，不应视为完整源码。
 
-RAG 文档处理、chunk 切片、关键词提取和 pgvector 建索引的细节见 `docs/rag-deep-dive.md`。如果面试官深挖 RAG，不要只背本文档的概括版，要优先按 deep dive 文档回答。
+RAG 文档处理、chunk 切片、关键词提取和 pgvector 建索引的细节见 `docs/rag-deep-dive.md`；本文档只保留流程概览。
 
 ## 1. 登录与权限认证流程
 
@@ -56,7 +56,7 @@ SecurityContextHolder.getContext().setAuthentication(authentication);
 .anyRequest().authenticated()
 ```
 
-### 面试追问
+### 设计问答
 
 **为什么用 JWT？**
 因为前后端分离项目不依赖服务端 Session，JWT 可以在无状态接口里携带用户身份和角色，方便网关或服务端鉴权。
@@ -122,7 +122,7 @@ record.setMatchedChunkIds(chunks.stream()
 chatRecordService.save(record);
 ```
 
-### 面试追问
+### 设计问答
 
 **为什么资料不足时不让模型自由回答？**
 因为这是课程知识库问答，用户期望的是可验证资料。无命中时拒答可以降低幻觉风险，也能提醒教师补充资料。
@@ -207,7 +207,7 @@ public double[] embed(String text) {
 }
 ```
 
-### 面试追问
+### 设计问答
 
 **为什么 pgvector 只做增强层，不替换 MySQL？**
 MySQL 负责稳定保存业务数据，pgvector 只负责向量相似度检索。这样职责清晰，pgvector 挂了也不会影响主业务。
@@ -287,7 +287,7 @@ for (int i = 0; i < chunks.size(); i++) {
 vectorSearchService.indexChunks(savedChunks, Map.of(document.getId(), document.getTitle()));
 ```
 
-### 面试追问
+### 设计问答
 
 **为什么用 MQ？**
 文档解析、切片和索引构建可能耗时，异步化可以让上传接口快速返回，提升用户体验，也方便失败重试和任务监控。
@@ -330,7 +330,7 @@ Object cached = redisTemplate.opsForValue().get(cacheKey);
 redisTemplate.opsForValue().set(cacheKey, list, Duration.ofMinutes(knowledgeBaseListTtlMinutes));
 ```
 
-### 面试追问
+### 设计问答
 
 **为什么不把聊天记录只放 Redis？**
 Redis 是热数据缓存，可能过期或丢失。正式问答记录需要落 MySQL，便于历史查询、审计和教师分析。
@@ -363,9 +363,9 @@ if (containsAny(text, List.of("成绩", "绩点", "学分", "挂科", "平均分
 
 文件：`src/main/java/com/liminghan/campusai/service/impl/AcademicServiceImpl.java`
 
-面试时说这里通过学生、课程、成绩表查询真实数据，不让大模型编造。
+这里通过学生、课程、成绩表查询结构化数据，不让大模型编造学业结果。
 
-### 面试追问
+### 设计问答
 
 **为什么不让 LLM 查成绩？**
 因为成绩是确定性业务数据，必须以数据库为准。大模型适合解释和总结，不适合生成事实性分数。
@@ -420,7 +420,7 @@ topQuestions.value = data.topQuestions || []
 summary.value = data
 ```
 
-### 面试追问
+### 设计问答
 
 **这个分析有什么业务价值？**
 可以发现学生集中卡住的知识点，也可以把无引用问题转成“待补充资料”，形成知识库运营闭环。
@@ -466,7 +466,7 @@ const statusCards = computed(() => [
 ])
 ```
 
-### 面试追问
+### 设计问答
 
 **失败任务怎么处理？**
 RabbitMQ 重试耗尽后进入失败状态，管理员可以在任务监控页查看失败原因并触发重新解析。
@@ -477,7 +477,7 @@ RabbitMQ 重试耗尽后进入失败状态，管理员可以在任务监控页�
 
 ### 怎么讲
 
-为了保证面试时能快速启动，项目启动后会自动执行 SQL 脚本，初始化表结构、演示账号、知识库、文档、chunk、对话和成绩数据。演示账号密码由 Java 端 BCrypt 重新生成，避免 SQL hash 与明文密码不一致。
+为了保证本地环境可以快速启动，项目启动后会自动执行 SQL 脚本，初始化表结构、演示账号、知识库、文档、chunk、对话和成绩数据。演示账号密码由 Java 端 BCrypt 重新生成，避免 SQL hash 与明文密码不一致。
 
 ### 关键代码
 
@@ -500,7 +500,7 @@ jdbcTemplate.update(
         hash);
 ```
 
-### 面试追问
+### 设计问答
 
 **为什么不用手动 SQL？**
 自动初始化降低演示成本，也避免不同机器环境数据不一致。脚本幂等，重复启动不会重复插入主键数据。
@@ -542,7 +542,7 @@ await uploadDocument(selectedKbId.value, formData)
 documents.value = await http.get('/admin/documents') || []
 ```
 
-### 面试追问
+### 设计问答
 
 **为什么学生端三栏布局？**
 左侧管理会话，中间问答，右侧显示引用来源和推荐追问。这样更符合知识库问答产品，而不是普通聊天框。

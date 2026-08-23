@@ -23,7 +23,7 @@ sequenceDiagram
   S-->>U: answer + matchedChunks + promptPreview
 ```
 
-当前实现是关键词 TopK 检索，不接向量数据库。这样便于本地运行和面试讲解，后续可以把 `RagService` 中的检索实现替换为向量检索。
+当前实现是关键词 TopK 检索，不接向量数据库。这样便于本地运行和理解链路，后续可以把 `RagService` 中的检索实现替换为向量检索。
 
 ## 文档切分
 

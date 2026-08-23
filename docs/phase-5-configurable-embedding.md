@@ -71,7 +71,7 @@ USING hnsw (embedding vector_cosine_ops);
 
 如果 pgvector 版本不支持 HNSW，系统只记录 warn，不影响关键词回退。
 
-## 面试讲法
+## 设计说明
 
 > 项目最初用 hashing embedding 打通 pgvector 工程链路，后来我把 embedding 抽象成 `EmbeddingClient`，支持 OpenAI-compatible 真实 embedding 接口。写入 pgvector 时不只保存向量，还保存 provider、model、dimension，检索时按这些元数据过滤，避免模型切换后索引混用。默认模式仍然是 hashing，保证本地演示稳定；配置真实服务后就能写入真实 embedding。pgvector 还支持可选 HNSW 索引，用于后续数据量上来后的 ANN 检索优化。
 
